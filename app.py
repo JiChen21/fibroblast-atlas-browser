@@ -198,6 +198,56 @@ def render_umap(df: pd.DataFrame, color: str, title: str, continuous: bool = Fal
     st.plotly_chart(fig, use_container_width=True)
 
 
+def render_violin(
+    df: pd.DataFrame,
+    x: str,
+    y: str,
+    title: str,
+    color: Optional[str] = None,
+) -> None:
+    fig = px.violin(
+        df,
+        x=x,
+        y=y,
+        color=color,
+        box=True,
+        points=False,
+        title=title,
+    )
+    fig.update_layout(height=520)
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def build_group_expression_stats(df: pd.DataFrame, group_col: str, expr_col: str) -> pd.DataFrame:
+    grouped = (
+        df.groupby(group_col, observed=False)[expr_col]
+        .agg(
+            mean_expression="mean",
+            median_expression="median",
+            pct_expressing=lambda s: float((s > 0).mean() * 100.0),
+            n_cells="size",
+        )
+        .reset_index()
+        .sort_values("mean_expression", ascending=False)
+    )
+    return grouped
+
+
+def render_dotplot(df: pd.DataFrame, x: str, y: str, size: str, color: str, title: str) -> None:
+    fig = px.scatter(
+        df,
+        x=x,
+        y=y,
+        size=size,
+        color=color,
+        color_continuous_scale="Viridis",
+        title=title,
+        hover_data={"mean_expression": ":.4f", "median_expression": ":.4f", "pct_expressing": ":.2f", "n_cells": True},
+    )
+    fig.update_layout(height=460)
+    st.plotly_chart(fig, use_container_width=True)
+
+
 def main() -> None:
     st.set_page_config(page_title="Single-cell AnnData Explorer", layout="wide")
     st.title("Single-cell AnnData Explorer")
@@ -326,8 +376,53 @@ def main() -> None:
                         title=f"UMAP • {gene_query} expression ({expression_source})",
                         continuous=True,
                     )
+
+                    analysis_indices = filtered_indices
+                    analysis_df = adata.obs.iloc[analysis_indices][["cell_type", "condition"]].copy()
+                    analysis_df["cell_type"] = analysis_df["cell_type"].astype(str)
+                    analysis_df["condition"] = analysis_df["condition"].astype(str)
+                    analysis_df["gene_expression"] = extract_gene_for_indices(
+                        expr_matrix, gene_idx, analysis_indices
+                    )
+
+                    st.subheader(f"{gene_query} expression by cell_type (violin)")
+                    render_violin(
+                        analysis_df,
+                        x="cell_type",
+                        y="gene_expression",
+                        color="cell_type",
+                        title=f"{gene_query} expression across cell types",
+                    )
+
+                    st.subheader(f"{gene_query} expression in different conditions")
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        cond_stats = build_group_expression_stats(
+                            analysis_df, group_col="condition", expr_col="gene_expression"
+                        )
+                        render_dotplot(
+                            cond_stats,
+                            x="condition",
+                            y="mean_expression",
+                            size="pct_expressing",
+                            color="mean_expression",
+                            title=f"{gene_query} condition dot plot (size=% expressing)",
+                        )
+                    with c2:
+                        render_violin(
+                            analysis_df,
+                            x="condition",
+                            y="gene_expression",
+                            color="condition",
+                            title=f"{gene_query} condition violin plot",
+                        )
             except ValueError as exc:
                 st.error(str(exc))
+            except KeyError as exc:
+                st.error(
+                    f"Dataset is missing required metadata column: {exc}. "
+                    "Please ensure obs includes both 'cell_type' and 'condition'."
+                )
         else:
             st.info("Select a gene in the sidebar to display expression on UMAP.")
 
