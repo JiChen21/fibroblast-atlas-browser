@@ -22,6 +22,30 @@ FILTER_COLUMNS = [
     "leiden",
     "leiden_default",
 ]
+CELL_TYPE_COLOR_MAP = {
+    "F1_Basal": "#8dd3c7",
+    "F2_PSL": "#ffffb3",
+    "F3_Int": "#bebada",
+    "F4_Act": "#fb8072",
+    "F5_ECM": "#80b1d3",
+    "F6_SLIT3+": "#fdb462",
+    "F7_Inflam": "#b3de69",
+    "F8_ITM2B+": "#fccde5",
+    "F9_Mech": "#e08214",
+    "F10_CML": "#ccebc5",
+    "F11_ECL": "#bc80bd",
+}
+CONDITION_COLOR_MAP = {
+    "CTRL": "#b8e186",
+    "HCM": "#fdb462",
+    "ACM": "#fccde5",
+    "AS": "#fee090",
+    "MI": "#d6604d",
+    "ICM": "#1d91c0",
+    "DCM": "#fb8072",
+    "HF": "#c51b7d",
+    "COVID19": "#17becf",
+}
 
 
 def build_mock_adata(n_cells: int = 3000, n_genes: int = 80) -> ad.AnnData:
@@ -182,7 +206,16 @@ def extract_gene_for_indices(matrix: object, gene_idx: int, obs_indices: np.ndar
     return np.asarray(values).ravel()
 
 
+def get_discrete_color_map(column_name: str) -> Optional[Dict[str, str]]:
+    if column_name == "cell_type":
+        return CELL_TYPE_COLOR_MAP
+    if column_name == "condition":
+        return CONDITION_COLOR_MAP
+    return None
+
+
 def render_umap(df: pd.DataFrame, color: str, title: str, continuous: bool = False) -> None:
+    discrete_color_map = None if continuous else get_discrete_color_map(color)
     fig = px.scatter(
         df,
         x="UMAP1",
@@ -192,9 +225,83 @@ def render_umap(df: pd.DataFrame, color: str, title: str, continuous: bool = Fal
         render_mode="webgl",
         opacity=0.75,
         color_continuous_scale="Viridis" if continuous else None,
+        color_discrete_map=discrete_color_map,
     )
     fig.update_traces(marker={"size": 3})
-    fig.update_layout(height=620, legend={"itemsizing": "constant"})
+    fig.update_layout(
+        height=820,
+        width=820,
+        legend={"itemsizing": "constant"},
+    )
+    fig.update_yaxes(scaleanchor="x", scaleratio=1)
+    st.plotly_chart(fig, use_container_width=False)
+
+
+def render_violin(
+    df: pd.DataFrame,
+    x: str,
+    y: str,
+    title: str,
+    color: Optional[str] = None,
+) -> None:
+    color_discrete_map = get_discrete_color_map(color) if color else None
+    fig = px.violin(
+        df,
+        x=x,
+        y=y,
+        color=color,
+        color_discrete_map=color_discrete_map,
+        box=True,
+        points=False,
+        title=title,
+    )
+    fig.update_layout(height=520)
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def build_group_expression_stats(df: pd.DataFrame, group_col: str, expr_col: str) -> pd.DataFrame:
+    grouped = (
+        df.groupby(group_col, observed=False)[expr_col]
+        .agg(
+            mean_expression="mean",
+            median_expression="median",
+            pct_expressing=lambda s: float((s > 0).mean() * 100.0),
+            n_cells="size",
+        )
+        .reset_index()
+        .sort_values("mean_expression", ascending=False)
+    )
+    return grouped
+
+
+def render_dotplot(
+    df: pd.DataFrame,
+    x: str,
+    y: str,
+    size: str,
+    color: str,
+    title: str,
+    use_continuous_color: bool = True,
+) -> None:
+    color_discrete_map = None
+    color_continuous_scale = None
+    if use_continuous_color:
+        color_continuous_scale = "Viridis"
+    else:
+        color_discrete_map = get_discrete_color_map(color)
+
+    fig = px.scatter(
+        df,
+        x=x,
+        y=y,
+        size=size,
+        color=color,
+        color_discrete_map=color_discrete_map,
+        color_continuous_scale=color_continuous_scale,
+        title=title,
+        hover_data={"mean_expression": ":.4f", "median_expression": ":.4f", "pct_expressing": ":.2f", "n_cells": True},
+    )
+    fig.update_layout(height=460)
     st.plotly_chart(fig, use_container_width=True)
 
 
@@ -405,8 +512,9 @@ def main() -> None:
                             x="condition",
                             y="mean_expression",
                             size="pct_expressing",
-                            color="mean_expression",
+                            color="condition",
                             title=f"{gene_query} condition dot plot (size=% expressing)",
+                            use_continuous_color=False,
                         )
                     with c2:
                         render_violin(
