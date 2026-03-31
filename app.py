@@ -234,7 +234,7 @@ def render_umap(df: pd.DataFrame, color: str, title: str, continuous: bool = Fal
         legend={"itemsizing": "constant"},
     )
     fig.update_yaxes(scaleanchor="x", scaleratio=1)
-    st.plotly_chart(fig, use_container_width=False)
+    st.plotly_chart(fig, width="content")
 
 
 def render_violin(
@@ -256,7 +256,7 @@ def render_violin(
         title=title,
     )
     fig.update_layout(height=520)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 def build_group_expression_stats(df: pd.DataFrame, group_col: str, expr_col: str) -> pd.DataFrame:
@@ -281,14 +281,13 @@ def render_dotplot(
     size: str,
     color: str,
     title: str,
-    use_continuous_color: bool = True,
 ) -> None:
     color_discrete_map = None
     color_continuous_scale = None
-    if use_continuous_color:
-        color_continuous_scale = "Viridis"
-    else:
+    if color in {"cell_type", "condition"}:
         color_discrete_map = get_discrete_color_map(color)
+    else:
+        color_continuous_scale = "Viridis"
 
     fig = px.scatter(
         df,
@@ -302,57 +301,7 @@ def render_dotplot(
         hover_data={"mean_expression": ":.4f", "median_expression": ":.4f", "pct_expressing": ":.2f", "n_cells": True},
     )
     fig.update_layout(height=460)
-    st.plotly_chart(fig, use_container_width=True)
-
-
-def render_violin(
-    df: pd.DataFrame,
-    x: str,
-    y: str,
-    title: str,
-    color: Optional[str] = None,
-) -> None:
-    fig = px.violin(
-        df,
-        x=x,
-        y=y,
-        color=color,
-        box=True,
-        points=False,
-        title=title,
-    )
-    fig.update_layout(height=520)
-    st.plotly_chart(fig, use_container_width=True)
-
-
-def build_group_expression_stats(df: pd.DataFrame, group_col: str, expr_col: str) -> pd.DataFrame:
-    grouped = (
-        df.groupby(group_col, observed=False)[expr_col]
-        .agg(
-            mean_expression="mean",
-            median_expression="median",
-            pct_expressing=lambda s: float((s > 0).mean() * 100.0),
-            n_cells="size",
-        )
-        .reset_index()
-        .sort_values("mean_expression", ascending=False)
-    )
-    return grouped
-
-
-def render_dotplot(df: pd.DataFrame, x: str, y: str, size: str, color: str, title: str) -> None:
-    fig = px.scatter(
-        df,
-        x=x,
-        y=y,
-        size=size,
-        color=color,
-        color_continuous_scale="Viridis",
-        title=title,
-        hover_data={"mean_expression": ":.4f", "median_expression": ":.4f", "pct_expressing": ":.2f", "n_cells": True},
-    )
-    fig.update_layout(height=460)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 def main() -> None:
@@ -387,7 +336,7 @@ def main() -> None:
         )
 
         st.subheader("Filters")
-        if st.button("Reset filters", use_container_width=True):
+        if st.button("Reset filters", width="stretch"):
             for col in filter_options:
                 st.session_state[f"filter_{col}"] = []
 
@@ -514,7 +463,6 @@ def main() -> None:
                             size="pct_expressing",
                             color="condition",
                             title=f"{gene_query} condition dot plot (size=% expressing)",
-                            use_continuous_color=False,
                         )
                     with c2:
                         render_violin(
@@ -542,7 +490,7 @@ def main() -> None:
                 "dtype": [str(dtype) for dtype in adata.obs.dtypes],
             }
         )
-        st.dataframe(data_dict, use_container_width=True)
+        st.dataframe(data_dict, width="stretch")
 
 
 if __name__ == "__main__":
