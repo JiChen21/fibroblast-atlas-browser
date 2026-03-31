@@ -22,6 +22,30 @@ FILTER_COLUMNS = [
     "leiden",
     "leiden_default",
 ]
+CELL_TYPE_COLOR_MAP = {
+    "F1_Basal": "#8dd3c7",
+    "F2_PSL": "#ffffb3",
+    "F3_Int": "#bebada",
+    "F4_Act": "#fb8072",
+    "F5_ECM": "#80b1d3",
+    "F6_SLIT3+": "#fdb462",
+    "F7_Inflam": "#b3de69",
+    "F8_ITM2B+": "#fccde5",
+    "F9_Mech": "#e08214",
+    "F10_CML": "#ccebc5",
+    "F11_ECL": "#bc80bd",
+}
+CONDITION_COLOR_MAP = {
+    "CTRL": "#b8e186",
+    "HCM": "#fdb462",
+    "ACM": "#fccde5",
+    "AS": "#fee090",
+    "MI": "#d6604d",
+    "ICM": "#1d91c0",
+    "DCM": "#fb8072",
+    "HF": "#c51b7d",
+    "COVID19": "#17becf",
+}
 
 
 def build_mock_adata(n_cells: int = 3000, n_genes: int = 80) -> ad.AnnData:
@@ -182,7 +206,16 @@ def extract_gene_for_indices(matrix: object, gene_idx: int, obs_indices: np.ndar
     return np.asarray(values).ravel()
 
 
+def get_discrete_color_map(column_name: str) -> Optional[Dict[str, str]]:
+    if column_name == "cell_type":
+        return CELL_TYPE_COLOR_MAP
+    if column_name == "condition":
+        return CONDITION_COLOR_MAP
+    return None
+
+
 def render_umap(df: pd.DataFrame, color: str, title: str, continuous: bool = False) -> None:
+    discrete_color_map = None if continuous else get_discrete_color_map(color)
     fig = px.scatter(
         df,
         x="UMAP1",
@@ -192,10 +225,83 @@ def render_umap(df: pd.DataFrame, color: str, title: str, continuous: bool = Fal
         render_mode="webgl",
         opacity=0.75,
         color_continuous_scale="Viridis" if continuous else None,
+        color_discrete_map=discrete_color_map,
     )
     fig.update_traces(marker={"size": 3})
-    fig.update_layout(height=620, legend={"itemsizing": "constant"})
-    st.plotly_chart(fig, use_container_width=True)
+    fig.update_layout(
+        height=820,
+        width=820,
+        legend={"itemsizing": "constant"},
+    )
+    fig.update_yaxes(scaleanchor="x", scaleratio=1)
+    st.plotly_chart(fig, width="content")
+
+
+def render_violin(
+    df: pd.DataFrame,
+    x: str,
+    y: str,
+    title: str,
+    color: Optional[str] = None,
+) -> None:
+    color_discrete_map = get_discrete_color_map(color) if color else None
+    fig = px.violin(
+        df,
+        x=x,
+        y=y,
+        color=color,
+        color_discrete_map=color_discrete_map,
+        box=True,
+        points=False,
+        title=title,
+    )
+    fig.update_layout(height=520)
+    st.plotly_chart(fig, width="stretch")
+
+
+def build_group_expression_stats(df: pd.DataFrame, group_col: str, expr_col: str) -> pd.DataFrame:
+    grouped = (
+        df.groupby(group_col, observed=False)[expr_col]
+        .agg(
+            mean_expression="mean",
+            median_expression="median",
+            pct_expressing=lambda s: float((s > 0).mean() * 100.0),
+            n_cells="size",
+        )
+        .reset_index()
+        .sort_values("mean_expression", ascending=False)
+    )
+    return grouped
+
+
+def render_dotplot(
+    df: pd.DataFrame,
+    x: str,
+    y: str,
+    size: str,
+    color: str,
+    title: str,
+) -> None:
+    color_discrete_map = None
+    color_continuous_scale = None
+    if color in {"cell_type", "condition"}:
+        color_discrete_map = get_discrete_color_map(color)
+    else:
+        color_continuous_scale = "Viridis"
+
+    fig = px.scatter(
+        df,
+        x=x,
+        y=y,
+        size=size,
+        color=color,
+        color_discrete_map=color_discrete_map,
+        color_continuous_scale=color_continuous_scale,
+        title=title,
+        hover_data={"mean_expression": ":.4f", "median_expression": ":.4f", "pct_expressing": ":.2f", "n_cells": True},
+    )
+    fig.update_layout(height=460)
+    st.plotly_chart(fig, width="stretch")
 
 
 def main() -> None:
@@ -230,7 +336,7 @@ def main() -> None:
         )
 
         st.subheader("Filters")
-        if st.button("Reset filters", use_container_width=True):
+        if st.button("Reset filters", width="stretch"):
             for col in filter_options:
                 st.session_state[f"filter_{col}"] = []
 
@@ -326,8 +432,53 @@ def main() -> None:
                         title=f"UMAP • {gene_query} expression ({expression_source})",
                         continuous=True,
                     )
+
+                    analysis_indices = filtered_indices
+                    analysis_df = adata.obs.iloc[analysis_indices][["cell_type", "condition"]].copy()
+                    analysis_df["cell_type"] = analysis_df["cell_type"].astype(str)
+                    analysis_df["condition"] = analysis_df["condition"].astype(str)
+                    analysis_df["gene_expression"] = extract_gene_for_indices(
+                        expr_matrix, gene_idx, analysis_indices
+                    )
+
+                    st.subheader(f"{gene_query} expression by cell_type (violin)")
+                    render_violin(
+                        analysis_df,
+                        x="cell_type",
+                        y="gene_expression",
+                        color="cell_type",
+                        title=f"{gene_query} expression across cell types",
+                    )
+
+                    st.subheader(f"{gene_query} expression in different conditions")
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        cond_stats = build_group_expression_stats(
+                            analysis_df, group_col="condition", expr_col="gene_expression"
+                        )
+                        render_dotplot(
+                            cond_stats,
+                            x="condition",
+                            y="mean_expression",
+                            size="pct_expressing",
+                            color="condition",
+                            title=f"{gene_query} condition dot plot (size=% expressing)",
+                        )
+                    with c2:
+                        render_violin(
+                            analysis_df,
+                            x="condition",
+                            y="gene_expression",
+                            color="condition",
+                            title=f"{gene_query} condition violin plot",
+                        )
             except ValueError as exc:
                 st.error(str(exc))
+            except KeyError as exc:
+                st.error(
+                    f"Dataset is missing required metadata column: {exc}. "
+                    "Please ensure obs includes both 'cell_type' and 'condition'."
+                )
         else:
             st.info("Select a gene in the sidebar to display expression on UMAP.")
 
@@ -339,7 +490,7 @@ def main() -> None:
                 "dtype": [str(dtype) for dtype in adata.obs.dtypes],
             }
         )
-        st.dataframe(data_dict, use_container_width=True)
+        st.dataframe(data_dict, width="stretch")
 
 
 if __name__ == "__main__":
