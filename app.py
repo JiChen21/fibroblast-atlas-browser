@@ -305,6 +305,56 @@ def render_dotplot(
     st.plotly_chart(fig, use_container_width=True)
 
 
+def render_violin(
+    df: pd.DataFrame,
+    x: str,
+    y: str,
+    title: str,
+    color: Optional[str] = None,
+) -> None:
+    fig = px.violin(
+        df,
+        x=x,
+        y=y,
+        color=color,
+        box=True,
+        points=False,
+        title=title,
+    )
+    fig.update_layout(height=520)
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def build_group_expression_stats(df: pd.DataFrame, group_col: str, expr_col: str) -> pd.DataFrame:
+    grouped = (
+        df.groupby(group_col, observed=False)[expr_col]
+        .agg(
+            mean_expression="mean",
+            median_expression="median",
+            pct_expressing=lambda s: float((s > 0).mean() * 100.0),
+            n_cells="size",
+        )
+        .reset_index()
+        .sort_values("mean_expression", ascending=False)
+    )
+    return grouped
+
+
+def render_dotplot(df: pd.DataFrame, x: str, y: str, size: str, color: str, title: str) -> None:
+    fig = px.scatter(
+        df,
+        x=x,
+        y=y,
+        size=size,
+        color=color,
+        color_continuous_scale="Viridis",
+        title=title,
+        hover_data={"mean_expression": ":.4f", "median_expression": ":.4f", "pct_expressing": ":.2f", "n_cells": True},
+    )
+    fig.update_layout(height=460)
+    st.plotly_chart(fig, use_container_width=True)
+
+
 def main() -> None:
     st.set_page_config(page_title="Single-cell AnnData Explorer", layout="wide")
     st.title("Single-cell AnnData Explorer")
