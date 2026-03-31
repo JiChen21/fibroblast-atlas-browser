@@ -76,7 +76,6 @@ def load_adata(path: str) -> Tuple[ad.AnnData, bool, str]:
         return build_mock_adata(), True, f"Failed loading '{path}' ({exc}). Running in DEMO mode."
 
 
-@st.cache_data(show_spinner=False)
 def get_umap_df(adata: ad.AnnData) -> pd.DataFrame:
     if "X_umap" not in adata.obsm:
         raise ValueError("UMAP coordinates were not found in adata.obsm['X_umap'].")
@@ -88,7 +87,6 @@ def get_umap_df(adata: ad.AnnData) -> pd.DataFrame:
     return pd.DataFrame({"UMAP1": coords[:, 0], "UMAP2": coords[:, 1]}, index=adata.obs_names)
 
 
-@st.cache_data(show_spinner=False)
 def get_filter_options(adata: ad.AnnData, columns: Tuple[str, ...]) -> Dict[str, List[str]]:
     out: Dict[str, List[str]] = {}
     for col in columns:
