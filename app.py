@@ -16,14 +16,7 @@ STRICT_DATA_MODE = os.getenv("STRICT_DATA", "false").strip().lower() in {"1", "t
 FILTER_COLUMNS = [
     "condition",
     "region",
-    "donor",
-    "dataset_name",
-    "cell_type",
-    "cell_type_V2",
-    "cell_type_V3",
-    "predicted_cell_type",
-    "leiden",
-    "leiden_default",
+    "cell_type"
 ]
 CELL_TYPE_ORDER = [
     "F1_Basal",
