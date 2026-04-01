@@ -10,6 +10,7 @@ from scipy import sparse
 
 DEFAULT_H5AD_PATH = "./data/FBs_adata.h5ad"
 DEFAULT_MAX_POINTS = int(os.getenv("UMAP_MAX_POINTS", "200000"))
+STRICT_DATA_MODE = os.getenv("STRICT_DATA", "false").strip().lower() in {"1", "true", "yes", "on"}
 FILTER_COLUMNS = [
     "condition",
     "region",
@@ -22,6 +23,7 @@ FILTER_COLUMNS = [
     "leiden",
     "leiden_default",
 ]
+CORE_REQUIRED_OBS = ["cell_type", "condition"]
 CELL_TYPE_COLOR_MAP = {
     "F1_Basal": "#8dd3c7",
     "F2_PSL": "#ffffb3",
@@ -131,6 +133,7 @@ def choose_plot_indices(
     filtered_indices: np.ndarray,
     view_mode: str,
     max_points: int,
+    strata_values: Optional[np.ndarray] = None,
     random_seed: int = 42,
 ) -> Tuple[np.ndarray, str]:
     n_filtered = filtered_indices.size
@@ -142,11 +145,70 @@ def choose_plot_indices(
         use_downsample = n_filtered > max_points
 
     if use_downsample and n_filtered > max_points:
+        if strata_values is not None and strata_values.size == n_filtered:
+            selected = stratified_sample_indices(
+                filtered_indices=filtered_indices,
+                strata_values=strata_values,
+                max_points=max_points,
+                random_seed=random_seed,
+            )
+            return selected, f"Displaying {max_points:,}/{n_filtered:,} filtered cells (stratified downsampled)."
         rng = np.random.default_rng(random_seed)
         selected = np.sort(rng.choice(filtered_indices, size=max_points, replace=False))
         return selected, f"Displaying {max_points:,}/{n_filtered:,} filtered cells (downsampled)."
 
     return filtered_indices, f"Displaying all {n_filtered:,} filtered cells."
+
+
+def stratified_sample_indices(
+    filtered_indices: np.ndarray,
+    strata_values: np.ndarray,
+    max_points: int,
+    random_seed: int = 42,
+) -> np.ndarray:
+    """Proportionally downsample while preserving group composition when possible."""
+    rng = np.random.default_rng(random_seed)
+    strata_values = strata_values.astype(str)
+    unique_groups, inverse = np.unique(strata_values, return_inverse=True)
+    group_positions = [np.flatnonzero(inverse == i) for i in range(len(unique_groups))]
+    group_sizes = np.array([len(pos) for pos in group_positions], dtype=int)
+    n_total = int(group_sizes.sum())
+    if n_total <= max_points:
+        return filtered_indices
+
+    exact_alloc = group_sizes / n_total * max_points
+    alloc = np.floor(exact_alloc).astype(int)
+    alloc = np.minimum(alloc, group_sizes)
+
+    remainder = max_points - int(alloc.sum())
+    if remainder > 0:
+        frac = exact_alloc - np.floor(exact_alloc)
+        order = np.argsort(-frac)
+        for idx in order:
+            if remainder == 0:
+                break
+            if alloc[idx] < group_sizes[idx]:
+                alloc[idx] += 1
+                remainder -= 1
+
+    selected_parts: List[np.ndarray] = []
+    for i, pos in enumerate(group_positions):
+        take = int(alloc[i])
+        if take <= 0:
+            continue
+        if take >= len(pos):
+            picked_pos = pos
+        else:
+            picked_pos = rng.choice(pos, size=take, replace=False)
+        selected_parts.append(filtered_indices[np.sort(picked_pos)])
+
+    if not selected_parts:
+        return np.sort(rng.choice(filtered_indices, size=max_points, replace=False))
+    return np.sort(np.concatenate(selected_parts))
+
+
+def validate_core_metadata(adata: ad.AnnData) -> List[str]:
+    return [col for col in CORE_REQUIRED_OBS if col not in adata.obs.columns]
 
 
 def get_expression_source_options(adata: ad.AnnData) -> List[str]:
@@ -306,15 +368,18 @@ def render_dotplot(
 
 def main() -> None:
     st.set_page_config(page_title="Single-cell AnnData Explorer", layout="wide")
-    st.title("Single-cell AnnData Explorer")
+    st.title("Cross-disease Human Heart Fibroblast Atlas")
 
     default_path = os.getenv("H5AD_PATH", DEFAULT_H5AD_PATH)
+    adata, is_demo, status_msg = load_adata(default_path)
+    if STRICT_DATA_MODE and is_demo:
+        st.error(
+            "STRICT_DATA is enabled. Failed to load a valid dataset from H5AD_PATH; "
+            "demo fallback is disabled."
+        )
+        st.caption(status_msg)
+        st.stop()
 
-    with st.sidebar:
-        st.header("Controls")
-        h5ad_path = st.text_input("Dataset path", value=default_path)
-
-    adata, is_demo, status_msg = load_adata(h5ad_path)
     if is_demo:
         st.warning(f"DEMO MODE: {status_msg}")
     else:
@@ -324,11 +389,23 @@ def main() -> None:
         st.error("Missing required UMAP embedding: adata.obsm['X_umap'].")
         st.stop()
 
+    missing_core_obs = validate_core_metadata(adata)
+    if missing_core_obs:
+        st.error(
+            "Dataset is missing required metadata columns for this app: "
+            + ", ".join(missing_core_obs)
+            + "."
+        )
+        st.caption("Please provide these columns in adata.obs before using this portal.")
+        st.stop()
+
     obs_cols = adata.obs.columns.astype(str).tolist()
     color_candidates = obs_cols if obs_cols else ["None"]
     filter_options = get_filter_options(adata, tuple(FILTER_COLUMNS))
 
     with st.sidebar:
+        st.header("Atlas controls")
+        st.caption(f"Dataset source: `{default_path}`")
         color_by = st.selectbox(
             "Metadata color selector",
             options=color_candidates,
@@ -362,27 +439,56 @@ def main() -> None:
 
         st.subheader("Gene query")
         expression_source = st.selectbox("Expression source", options=get_expression_source_options(adata))
-        gene_id_options = ["var_names"] + adata.var.columns.astype(str).tolist()
-        gene_id_field = st.selectbox(
-            "Gene identifier field",
-            options=gene_id_options,
-            help="Default is adata.var_names. Use a var column if you keep alternate gene IDs.",
-        )
         gene_query = st.text_input(
             "Gene search box",
             value="",
             placeholder="e.g., COL1A1",
-            help="Gene names are resolved from var_names by default.",
+            help="Gene names are resolved directly from adata.var_names.",
         ).strip()
 
     filter_mask = apply_filters(adata, selected_filters)
     filtered_indices = np.flatnonzero(filter_mask)
     n_selected = int(filtered_indices.size)
 
-    plotted_indices, view_msg = choose_plot_indices(filtered_indices, view_mode, max_points)
+    strata_values = None
+    if filtered_indices.size > 0:
+        if "cell_type" in adata.obs.columns:
+            strata_values = adata.obs.iloc[filtered_indices]["cell_type"].astype(str).to_numpy()
+        elif "condition" in adata.obs.columns:
+            strata_values = adata.obs.iloc[filtered_indices]["condition"].astype(str).to_numpy()
 
-    tabs = st.tabs(["Explorer", "Data dictionary"])
+    plotted_indices, view_msg = choose_plot_indices(filtered_indices, view_mode, max_points, strata_values=strata_values)
+
+    tabs = st.tabs(["Home", "Metadata Explorer", "Gene Query Module", "Data Dictionary"])
     with tabs[0]:
+        st.subheader("Atlas overview")
+        st.markdown(
+            """
+            Cardiac fibroblasts are central regulators of extracellular matrix remodeling and fibrosis across diverse
+            heart diseases, yet their heterogeneity and shared disease-associated states remain incompletely defined.
+
+            This atlas curates and integrates 21 publicly available human heart single-cell and single-nucleus
+            transcriptomic datasets, comprising approximately 730,000 fibroblasts from control hearts and eight disease
+            conditions: hypertrophic cardiomyopathy (HCM), arrhythmogenic cardiomyopathy (ACM), aortic stenosis (AS),
+            myocardial infarction (MI), ischemic cardiomyopathy (ICM), dilated cardiomyopathy (DCM), heart failure (HF),
+            and COVID-19-associated cardiac injury.
+
+            The portal is designed as an interactive resource for exploring fibroblast subtypes, gene expression
+            patterns, and cross-disease fibroblast remodeling in the human heart.
+            """
+        )
+        st.subheader("How to use this portal")
+        st.markdown(
+            """
+            1. Use **Metadata Explorer** to inspect UMAP distributions and subset cells with sidebar filters.  
+            2. Use **Gene Query Module** to visualize gene expression on UMAP and compare cell_type/condition-level patterns.  
+            3. Use **Data Dictionary** to inspect available metadata columns and dtypes.
+            """
+        )
+        st.info(view_msg)
+
+    with tabs[1]:
+        st.subheader("Metadata Explorer")
         st.info(view_msg)
         if view_mode != "Full":
             st.caption(
@@ -401,28 +507,24 @@ def main() -> None:
         c3.metric("Cells after filters", f"{n_selected:,}")
         st.caption("Available metadata columns: " + ", ".join(obs_cols))
 
-        st.subheader("About this dataset")
-        st.markdown(
-            """
-            This portal visualizes one AnnData (`.h5ad`) file with precomputed UMAP coordinates.
-            It supports metadata coloring, metadata filters, and on-demand single-gene overlays.
-            For large datasets, the app can display a capped random subset of cells for smoother plotting.
-            """
-        )
-
         st.subheader(f"UMAP colored by metadata: {color_by}")
         render_umap(plot_df, color=color_by, title=f"UMAP • {color_by}")
 
+    with tabs[2]:
+        st.subheader("Gene Query Module")
+        st.caption("Includes: expression UMAP overlay, cell_type violin plot, and condition-level dot/violin plots.")
         st.subheader("UMAP colored by gene expression")
         if gene_query:
             try:
                 expr_matrix, gene_names, gene_metadata = get_expression_source(adata, expression_source)
-                gene_idx = resolve_gene_index(gene_query, gene_id_field, gene_names, gene_metadata)
+                gene_idx = resolve_gene_index(gene_query, "var_names", gene_names, gene_metadata)
                 if gene_idx is None:
                     st.error(
-                        f"Gene '{gene_query}' was not found using '{gene_id_field}' in source '{expression_source}'."
+                        f"Gene '{gene_query}' was not found in var_names for source '{expression_source}'."
                     )
                 else:
+                    umap_df = get_umap_df(adata)
+                    plot_df = umap_df.iloc[plotted_indices].copy()
                     plot_df["gene_expression"] = extract_gene_for_indices(
                         expr_matrix, gene_idx, plotted_indices
                     )
@@ -482,7 +584,7 @@ def main() -> None:
         else:
             st.info("Select a gene in the sidebar to display expression on UMAP.")
 
-    with tabs[1]:
+    with tabs[3]:
         st.subheader("Data dictionary (obs)")
         data_dict = pd.DataFrame(
             {

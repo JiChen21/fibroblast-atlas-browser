@@ -7,6 +7,7 @@ A lightweight, production-friendly Streamlit app for exploring a single-cell Ann
 - Precomputed UMAP visualization from `adata.obsm["X_umap"]`.
 - UMAP coloring by metadata (`adata.obs`).
 - On-demand single-gene expression overlay.
+- Structured interface with dedicated Home / Metadata Explorer / Gene Query / Data Dictionary modules.
 - Multi-select metadata filters for common fibroblast atlas fields.
 - Optional downsampling for responsive large-scale plotting.
 - Data dictionary tab (`obs` column names + dtypes).
@@ -16,6 +17,7 @@ A lightweight, production-friendly Streamlit app for exploring a single-cell Ann
 
 - `H5AD_PATH` (default: `./data/FBs_adata.h5ad`)
 - `UMAP_MAX_POINTS` (default: `200000`)
+- `STRICT_DATA` (default: `false`; when `true`, app fails fast instead of using demo fallback)
 
 > Do **not** commit real `.h5ad` files to GitHub.
 
@@ -33,6 +35,8 @@ Set dataset path:
 export H5AD_PATH=./data/FBs_adata.h5ad
 export UMAP_MAX_POINTS=200000  # optional
 ```
+
+The app reads dataset path from `H5AD_PATH` (environment variable) and does not expose a path picker in the UI.
 
 Run app:
 
@@ -84,8 +88,8 @@ docker run --rm -p 8501:8501 \
 
 For ~739,910 cells, full interactive plotting can be slow depending on hardware.
 
-- `Auto` mode (default): plots all filtered points up to cap, otherwise random downsamples.
-- `Downsampled` mode: always uses random subset up to cap.
+- `Auto` mode (default): plots all filtered points up to cap, otherwise stratified downsamples.
+- `Downsampled` mode: always uses stratified subset up to cap.
 - `Full` mode: plots all filtered cells (best fidelity, slowest).
 
 Tradeoff:
@@ -103,7 +107,7 @@ Gene query supports expression from:
 - `raw` (if available)
 - `layer:<name>` (if available)
 
-Gene lookup uses `adata.var_names` by default, with optional lookup via an alternate `adata.var` column.
+Gene lookup uses `adata.var_names`.
 
 ## Expected AnnData structure
 
