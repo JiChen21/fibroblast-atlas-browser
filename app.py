@@ -217,6 +217,10 @@ def render_umap(
     fig.update_layout(
         height=height,
         legend={"itemsizing": "constant"},
+        template="plotly_white",
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#ffffff",
+        font={"color": "#111827"},
     )
     fig.update_yaxes(scaleanchor="x", scaleratio=1)
     st.plotly_chart(fig, width="stretch")
@@ -246,7 +250,14 @@ def render_violin(
         points=False,
         title=title,
     )
-    fig.update_layout(height=height, showlegend=show_legend)
+    fig.update_layout(
+        height=height,
+        showlegend=show_legend,
+        template="plotly_white",
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#ffffff",
+        font={"color": "#111827"},
+    )
     st.plotly_chart(fig, width="stretch")
 
 
@@ -297,7 +308,14 @@ def render_dotplot(
         title=title,
         hover_data={"mean_expression": ":.4f", "median_expression": ":.4f", "pct_expressing": ":.2f", "n_cells": True},
     )
-    fig.update_layout(height=height, showlegend=show_legend)
+    fig.update_layout(
+        height=height,
+        showlegend=show_legend,
+        template="plotly_white",
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#ffffff",
+        font={"color": "#111827"},
+    )
     st.plotly_chart(fig, width="stretch")
 
 
@@ -328,6 +346,25 @@ def apply_global_styles() -> None:
         .stApp h4,
         .stApp h5,
         .stApp h6 {
+            color: #111827 !important;
+        }
+        /* Streamlit/BaseWeb form controls */
+        .stSelectbox [data-baseweb="select"] > div,
+        .stMultiSelect [data-baseweb="select"] > div,
+        .stTextInput input,
+        .stNumberInput input,
+        .stTextArea textarea,
+        [data-baseweb="select"] div[role="combobox"] {
+            background-color: #ffffff !important;
+            color: #111827 !important;
+        }
+        .stButton > button,
+        .stDownloadButton > button {
+            background-color: #ffffff !important;
+            color: #111827 !important;
+            border: 1px solid #d1d5db !important;
+        }
+        .stRadio > div[role="radiogroup"] label {
             color: #111827 !important;
         }
         </style>
