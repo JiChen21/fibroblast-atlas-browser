@@ -224,6 +224,10 @@ def render_umap(
     fig.update_layout(
         height=height,
         legend={"itemsizing": "constant"},
+        template="plotly_white",
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#ffffff",
+        font={"color": "#111827"},
     )
     fig.update_yaxes(scaleanchor="x", scaleratio=1)
     st.plotly_chart(fig, width="stretch")
@@ -253,7 +257,14 @@ def render_violin(
         points=False,
         title=title,
     )
-    fig.update_layout(height=height, showlegend=show_legend)
+    fig.update_layout(
+        height=height,
+        showlegend=show_legend,
+        template="plotly_white",
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#ffffff",
+        font={"color": "#111827"},
+    )
     st.plotly_chart(fig, width="stretch")
 
 
@@ -304,12 +315,74 @@ def render_dotplot(
         title=title,
         hover_data={"mean_expression": ":.4f", "median_expression": ":.4f", "pct_expressing": ":.2f", "n_cells": True},
     )
-    fig.update_layout(height=height, showlegend=show_legend)
+    fig.update_layout(
+        height=height,
+        showlegend=show_legend,
+        template="plotly_white",
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#ffffff",
+        font={"color": "#111827"},
+    )
     st.plotly_chart(fig, width="stretch")
+
+
+def apply_global_styles() -> None:
+    st.markdown(
+        """
+        <style>
+        :root {
+            --background-color: #ffffff;
+            --secondary-background-color: #f7f7f7;
+            --text-color: #111827;
+        }
+        .stApp,
+        [data-testid="stAppViewContainer"],
+        [data-testid="stHeader"],
+        [data-testid="stSidebar"] {
+            background-color: #ffffff !important;
+        }
+        .stApp,
+        .stApp p,
+        .stApp li,
+        .stApp label,
+        .stApp span,
+        .stApp div,
+        .stApp h1,
+        .stApp h2,
+        .stApp h3,
+        .stApp h4,
+        .stApp h5,
+        .stApp h6 {
+            color: #111827 !important;
+        }
+        /* Streamlit/BaseWeb form controls */
+        .stSelectbox [data-baseweb="select"] > div,
+        .stMultiSelect [data-baseweb="select"] > div,
+        .stTextInput input,
+        .stNumberInput input,
+        .stTextArea textarea,
+        [data-baseweb="select"] div[role="combobox"] {
+            background-color: #ffffff !important;
+            color: #111827 !important;
+        }
+        .stButton > button,
+        .stDownloadButton > button {
+            background-color: #ffffff !important;
+            color: #111827 !important;
+            border: 1px solid #d1d5db !important;
+        }
+        .stRadio > div[role="radiogroup"] label {
+            color: #111827 !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def main() -> None:
     st.set_page_config(page_title="Single-cell AnnData Explorer", layout="wide")
+    apply_global_styles()
     st.title("Cross-disease Human Heart Fibroblast Atlas")
 
     default_path = os.getenv("H5AD_PATH", DEFAULT_H5AD_PATH)
@@ -440,11 +513,13 @@ def main() -> None:
         home_image_path = resolve_home_image_path()
         if home_image_path:
             logger.info("Using homepage image: %s", home_image_path)
-            st.image(
-                home_image_path,
-                caption="Fibroblast atlas overview figure",
-                use_container_width=True,
-            )
+            _, center_col, _ = st.columns([1, 6, 1])
+            with center_col:
+                st.image(
+                    home_image_path,
+                    caption="Fibroblast atlas overview figure",
+                    use_container_width=True,
+                )
         else:
             st.caption(
                 "Tip: set `HOME_IMAGE_PATH` or place an image at "
