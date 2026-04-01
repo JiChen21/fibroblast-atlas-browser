@@ -382,8 +382,6 @@ def main() -> None:
 
     if is_demo:
         st.warning(f"DEMO MODE: {status_msg}")
-    else:
-        st.success(f"Loaded dataset from: {status_msg}")
 
     if "X_umap" not in adata.obsm:
         st.error("Missing required UMAP embedding: adata.obsm['X_umap'].")
@@ -402,49 +400,62 @@ def main() -> None:
     obs_cols = adata.obs.columns.astype(str).tolist()
     color_candidates = obs_cols if obs_cols else ["None"]
     filter_options = get_filter_options(adata, tuple(FILTER_COLUMNS))
+    module = st.radio(
+        "Navigation",
+        ["Home", "Metadata Explorer", "Gene Query Module", "Data Dictionary"],
+        horizontal=True,
+        label_visibility="collapsed",
+    )
 
-    with st.sidebar:
-        st.header("Atlas controls")
-        st.caption(f"Dataset source: `{default_path}`")
-        color_by = st.selectbox(
-            "Metadata color selector",
-            options=color_candidates,
-            index=color_candidates.index("cell_type") if "cell_type" in color_candidates else 0,
-        )
+    color_by = "cell_type" if "cell_type" in color_candidates else color_candidates[0]
+    selected_filters: Dict[str, List[str]] = {}
+    view_mode = "Auto"
+    max_points = min(DEFAULT_MAX_POINTS, max(10000, adata.n_obs))
+    expression_source = "X"
+    gene_query = ""
 
-        st.subheader("Filters")
-        if st.button("Reset filters", width="stretch"):
-            for col in filter_options:
-                st.session_state[f"filter_{col}"] = []
-
-        selected_filters: Dict[str, List[str]] = {}
-        for col, options in filter_options.items():
-            key = f"filter_{col}"
-            if key not in st.session_state:
-                st.session_state[key] = []
-            selected_filters[col] = st.multiselect(col, options=options, key=key)
-
-        st.subheader("Visualization performance")
-        view_mode = st.radio("UMAP view mode", ["Auto", "Downsampled", "Full"], index=0)
-        max_points = int(
-            st.number_input(
-                "Display point cap",
-                min_value=10000,
-                max_value=max(10000, adata.n_obs),
-                value=min(DEFAULT_MAX_POINTS, max(10000, adata.n_obs)),
-                step=10000,
-                help="Used in Auto/Downsampled mode to keep plotting responsive.",
+    if module in {"Metadata Explorer", "Gene Query Module"}:
+        with st.sidebar:
+            st.header(f"{module} controls")
+            color_by = st.selectbox(
+                "Metadata color selector",
+                options=color_candidates,
+                index=color_candidates.index(color_by) if color_by in color_candidates else 0,
             )
-        )
 
-        st.subheader("Gene query")
-        expression_source = st.selectbox("Expression source", options=get_expression_source_options(adata))
-        gene_query = st.text_input(
-            "Gene search box",
-            value="",
-            placeholder="e.g., COL1A1",
-            help="Gene names are resolved directly from adata.var_names.",
-        ).strip()
+            st.subheader("Filters")
+            if st.button("Reset filters", width="stretch"):
+                for col in filter_options:
+                    st.session_state[f"filter_{col}"] = []
+
+            for col, options in filter_options.items():
+                key = f"filter_{col}"
+                if key not in st.session_state:
+                    st.session_state[key] = []
+                selected_filters[col] = st.multiselect(col, options=options, key=key)
+
+            st.subheader("Visualization performance")
+            view_mode = st.radio("UMAP view mode", ["Auto", "Downsampled", "Full"], index=0)
+            max_points = int(
+                st.number_input(
+                    "Display point cap",
+                    min_value=10000,
+                    max_value=max(10000, adata.n_obs),
+                    value=min(DEFAULT_MAX_POINTS, max(10000, adata.n_obs)),
+                    step=10000,
+                    help="Used in Auto/Downsampled mode to keep plotting responsive.",
+                )
+            )
+
+            if module == "Gene Query Module":
+                st.subheader("Gene query")
+                expression_source = st.selectbox("Expression source", options=get_expression_source_options(adata))
+                gene_query = st.text_input(
+                    "Gene search box",
+                    value="",
+                    placeholder="e.g., COL1A1",
+                    help="Gene names are resolved directly from adata.var_names.",
+                ).strip()
 
     filter_mask = apply_filters(adata, selected_filters)
     filtered_indices = np.flatnonzero(filter_mask)
@@ -459,8 +470,7 @@ def main() -> None:
 
     plotted_indices, view_msg = choose_plot_indices(filtered_indices, view_mode, max_points, strata_values=strata_values)
 
-    tabs = st.tabs(["Home", "Metadata Explorer", "Gene Query Module", "Data Dictionary"])
-    with tabs[0]:
+    if module == "Home":
         st.subheader("Atlas overview")
         st.markdown(
             """
@@ -485,9 +495,7 @@ def main() -> None:
             3. Use **Data Dictionary** to inspect available metadata columns and dtypes.
             """
         )
-        st.info(view_msg)
-
-    with tabs[1]:
+    elif module == "Metadata Explorer":
         st.subheader("Metadata Explorer")
         st.info(view_msg)
         if view_mode != "Full":
@@ -510,7 +518,7 @@ def main() -> None:
         st.subheader(f"UMAP colored by metadata: {color_by}")
         render_umap(plot_df, color=color_by, title=f"UMAP • {color_by}")
 
-    with tabs[2]:
+    elif module == "Gene Query Module":
         st.subheader("Gene Query Module")
         st.caption("Includes: expression UMAP overlay, cell_type violin plot, and condition-level dot/violin plots.")
         st.subheader("UMAP colored by gene expression")
@@ -584,7 +592,7 @@ def main() -> None:
         else:
             st.info("Select a gene in the sidebar to display expression on UMAP.")
 
-    with tabs[3]:
+    elif module == "Data Dictionary":
         st.subheader("Data dictionary (obs)")
         data_dict = pd.DataFrame(
             {
