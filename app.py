@@ -37,7 +37,7 @@ CELL_TYPE_ORDER = [
     "F10_CML",
     "F11_ECL",
 ]
-CONDITION_ORDER = ["CTRL", "HCM", "ACM", "AS", "AMI", "MI", "ICM", "DCM", "HF", "COVID19"]
+CONDITION_ORDER = ["CTRL", "HCM", "ACM", "AS", "AMI", "ICM", "DCM", "HF", "COVID19"]
 CELL_TYPE_COLOR_MAP = {
     "F1_Basal": "#8dd3c7",
     "F2_PSL": "#ffffb3",
@@ -56,7 +56,7 @@ CONDITION_COLOR_MAP = {
     "HCM": "#fdb462",
     "ACM": "#fccde5",
     "AS": "#fee090",
-    "MI": "#d6604d",
+    "AMI": "#d6604d",
     "ICM": "#1d91c0",
     "DCM": "#fb8072",
     "HF": "#c51b7d",
@@ -607,7 +607,7 @@ def main() -> None:
                             size="pct_expressing",
                             color="condition",
                             title=f"{gene_query} condition dot plot (size=% expressing)",
-                            height=360,
+                            height=480,
                             show_legend=False,
                         )
                     with bottom_right:
@@ -617,7 +617,7 @@ def main() -> None:
                             y="gene_expression",
                             color="condition",
                             title=f"{gene_query} condition violin plot",
-                            height=360,
+                            height=480,
                             show_legend=False,
                         )
             except ValueError as exc:
