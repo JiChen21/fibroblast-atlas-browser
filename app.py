@@ -469,7 +469,7 @@ def main() -> None:
         home_image_path = resolve_home_image_path()
         if home_image_path:
             logger.info("Using homepage image: %s", home_image_path)
-            _, center_col, _ = st.columns([1, 8, 1])
+            _, center_col, _ = st.columns([1, 6, 1])
             with center_col:
                 st.image(
                     home_image_path,
