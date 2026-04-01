@@ -308,8 +308,25 @@ def render_dotplot(
     st.plotly_chart(fig, width="stretch")
 
 
+def apply_global_styles() -> None:
+    st.markdown(
+        """
+        <style>
+        .stApp,
+        [data-testid="stAppViewContainer"],
+        [data-testid="stHeader"],
+        [data-testid="stSidebar"] {
+            background-color: #ffffff !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def main() -> None:
     st.set_page_config(page_title="Single-cell AnnData Explorer", layout="wide")
+    apply_global_styles()
     st.title("Cross-disease Human Heart Fibroblast Atlas")
 
     default_path = os.getenv("H5AD_PATH", DEFAULT_H5AD_PATH)
@@ -440,11 +457,13 @@ def main() -> None:
         home_image_path = resolve_home_image_path()
         if home_image_path:
             logger.info("Using homepage image: %s", home_image_path)
-            st.image(
-                home_image_path,
-                caption="Fibroblast atlas overview figure",
-                use_container_width=True,
-            )
+            _, center_col, _ = st.columns([1, 8, 1])
+            with center_col:
+                st.image(
+                    home_image_path,
+                    caption="Fibroblast atlas overview figure",
+                    use_container_width=True,
+                )
         else:
             st.caption(
                 "Tip: set `HOME_IMAGE_PATH` or place an image at "
