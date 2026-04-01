@@ -7,6 +7,7 @@ A lightweight, production-friendly Streamlit app for exploring a single-cell Ann
 - Precomputed UMAP visualization from `adata.obsm["X_umap"]`.
 - UMAP coloring by metadata (`adata.obs`).
 - On-demand single-gene expression overlay.
+- Structured interface with dedicated Home / Metadata Explorer / Gene Query / Data Dictionary modules.
 - Multi-select metadata filters for common fibroblast atlas fields.
 - Optional downsampling for responsive large-scale plotting.
 - Data dictionary tab (`obs` column names + dtypes).
@@ -34,6 +35,8 @@ Set dataset path:
 export H5AD_PATH=./data/FBs_adata.h5ad
 export UMAP_MAX_POINTS=200000  # optional
 ```
+
+The app reads dataset path from `H5AD_PATH` (environment variable) and does not expose a path picker in the UI.
 
 Run app:
 
@@ -104,7 +107,7 @@ Gene query supports expression from:
 - `raw` (if available)
 - `layer:<name>` (if available)
 
-Gene lookup uses `adata.var_names` by default, with optional lookup via an alternate `adata.var` column.
+Gene lookup uses `adata.var_names`.
 
 ## Expected AnnData structure
 

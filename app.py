@@ -368,15 +368,10 @@ def render_dotplot(
 
 def main() -> None:
     st.set_page_config(page_title="Single-cell AnnData Explorer", layout="wide")
-    st.title("Single-cell AnnData Explorer")
+    st.title("Cross-disease Human Heart Fibroblast Atlas")
 
     default_path = os.getenv("H5AD_PATH", DEFAULT_H5AD_PATH)
-
-    with st.sidebar:
-        st.header("Controls")
-        h5ad_path = st.text_input("Dataset path", value=default_path)
-
-    adata, is_demo, status_msg = load_adata(h5ad_path)
+    adata, is_demo, status_msg = load_adata(default_path)
     if STRICT_DATA_MODE and is_demo:
         st.error(
             "STRICT_DATA is enabled. Failed to load a valid dataset from H5AD_PATH; "
@@ -409,6 +404,8 @@ def main() -> None:
     filter_options = get_filter_options(adata, tuple(FILTER_COLUMNS))
 
     with st.sidebar:
+        st.header("Atlas controls")
+        st.caption(f"Dataset source: `{default_path}`")
         color_by = st.selectbox(
             "Metadata color selector",
             options=color_candidates,
@@ -442,17 +439,11 @@ def main() -> None:
 
         st.subheader("Gene query")
         expression_source = st.selectbox("Expression source", options=get_expression_source_options(adata))
-        gene_id_options = ["var_names"] + adata.var.columns.astype(str).tolist()
-        gene_id_field = st.selectbox(
-            "Gene identifier field",
-            options=gene_id_options,
-            help="Default is adata.var_names. Use a var column if you keep alternate gene IDs.",
-        )
         gene_query = st.text_input(
             "Gene search box",
             value="",
             placeholder="e.g., COL1A1",
-            help="Gene names are resolved from var_names by default.",
+            help="Gene names are resolved directly from adata.var_names.",
         ).strip()
 
     filter_mask = apply_filters(adata, selected_filters)
@@ -468,8 +459,36 @@ def main() -> None:
 
     plotted_indices, view_msg = choose_plot_indices(filtered_indices, view_mode, max_points, strata_values=strata_values)
 
-    tabs = st.tabs(["Explorer", "Data dictionary"])
+    tabs = st.tabs(["Home", "Metadata Explorer", "Gene Query Module", "Data Dictionary"])
     with tabs[0]:
+        st.subheader("Atlas overview")
+        st.markdown(
+            """
+            Cardiac fibroblasts are central regulators of extracellular matrix remodeling and fibrosis across diverse
+            heart diseases, yet their heterogeneity and shared disease-associated states remain incompletely defined.
+
+            This atlas curates and integrates 21 publicly available human heart single-cell and single-nucleus
+            transcriptomic datasets, comprising approximately 730,000 fibroblasts from control hearts and eight disease
+            conditions: hypertrophic cardiomyopathy (HCM), arrhythmogenic cardiomyopathy (ACM), aortic stenosis (AS),
+            myocardial infarction (MI), ischemic cardiomyopathy (ICM), dilated cardiomyopathy (DCM), heart failure (HF),
+            and COVID-19-associated cardiac injury.
+
+            The portal is designed as an interactive resource for exploring fibroblast subtypes, gene expression
+            patterns, and cross-disease fibroblast remodeling in the human heart.
+            """
+        )
+        st.subheader("How to use this portal")
+        st.markdown(
+            """
+            1. Use **Metadata Explorer** to inspect UMAP distributions and subset cells with sidebar filters.  
+            2. Use **Gene Query Module** to visualize gene expression on UMAP and compare cell_type/condition-level patterns.  
+            3. Use **Data Dictionary** to inspect available metadata columns and dtypes.
+            """
+        )
+        st.info(view_msg)
+
+    with tabs[1]:
+        st.subheader("Metadata Explorer")
         st.info(view_msg)
         if view_mode != "Full":
             st.caption(
@@ -488,28 +507,24 @@ def main() -> None:
         c3.metric("Cells after filters", f"{n_selected:,}")
         st.caption("Available metadata columns: " + ", ".join(obs_cols))
 
-        st.subheader("About this dataset")
-        st.markdown(
-            """
-            This portal visualizes one AnnData (`.h5ad`) file with precomputed UMAP coordinates.
-            It supports metadata coloring, metadata filters, and on-demand single-gene overlays.
-            For large datasets, the app can display a capped random subset of cells for smoother plotting.
-            """
-        )
-
         st.subheader(f"UMAP colored by metadata: {color_by}")
         render_umap(plot_df, color=color_by, title=f"UMAP • {color_by}")
 
+    with tabs[2]:
+        st.subheader("Gene Query Module")
+        st.caption("Includes: expression UMAP overlay, cell_type violin plot, and condition-level dot/violin plots.")
         st.subheader("UMAP colored by gene expression")
         if gene_query:
             try:
                 expr_matrix, gene_names, gene_metadata = get_expression_source(adata, expression_source)
-                gene_idx = resolve_gene_index(gene_query, gene_id_field, gene_names, gene_metadata)
+                gene_idx = resolve_gene_index(gene_query, "var_names", gene_names, gene_metadata)
                 if gene_idx is None:
                     st.error(
-                        f"Gene '{gene_query}' was not found using '{gene_id_field}' in source '{expression_source}'."
+                        f"Gene '{gene_query}' was not found in var_names for source '{expression_source}'."
                     )
                 else:
+                    umap_df = get_umap_df(adata)
+                    plot_df = umap_df.iloc[plotted_indices].copy()
                     plot_df["gene_expression"] = extract_gene_for_indices(
                         expr_matrix, gene_idx, plotted_indices
                     )
@@ -569,7 +584,7 @@ def main() -> None:
         else:
             st.info("Select a gene in the sidebar to display expression on UMAP.")
 
-    with tabs[1]:
+    with tabs[3]:
         st.subheader("Data dictionary (obs)")
         data_dict = pd.DataFrame(
             {
