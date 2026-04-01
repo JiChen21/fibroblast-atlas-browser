@@ -276,7 +276,13 @@ def get_discrete_color_map(column_name: str) -> Optional[Dict[str, str]]:
     return None
 
 
-def render_umap(df: pd.DataFrame, color: str, title: str, continuous: bool = False) -> None:
+def render_umap(
+    df: pd.DataFrame,
+    color: str,
+    title: str,
+    continuous: bool = False,
+    height: int = 620,
+) -> None:
     discrete_color_map = None if continuous else get_discrete_color_map(color)
     fig = px.scatter(
         df,
@@ -291,12 +297,11 @@ def render_umap(df: pd.DataFrame, color: str, title: str, continuous: bool = Fal
     )
     fig.update_traces(marker={"size": 3})
     fig.update_layout(
-        height=820,
-        width=820,
+        height=height,
         legend={"itemsizing": "constant"},
     )
     fig.update_yaxes(scaleanchor="x", scaleratio=1)
-    st.plotly_chart(fig, width="content")
+    st.plotly_chart(fig, width="stretch")
 
 
 def render_violin(
@@ -305,6 +310,7 @@ def render_violin(
     y: str,
     title: str,
     color: Optional[str] = None,
+    height: int = 420,
 ) -> None:
     color_discrete_map = get_discrete_color_map(color) if color else None
     fig = px.violin(
@@ -317,7 +323,7 @@ def render_violin(
         points=False,
         title=title,
     )
-    fig.update_layout(height=520)
+    fig.update_layout(height=height)
     st.plotly_chart(fig, width="stretch")
 
 
@@ -343,6 +349,7 @@ def render_dotplot(
     size: str,
     color: str,
     title: str,
+    height: int = 380,
 ) -> None:
     color_discrete_map = None
     color_continuous_scale = None
@@ -362,7 +369,7 @@ def render_dotplot(
         title=title,
         hover_data={"mean_expression": ":.4f", "median_expression": ":.4f", "pct_expressing": ":.2f", "n_cells": True},
     )
-    fig.update_layout(height=460)
+    fig.update_layout(height=height)
     st.plotly_chart(fig, width="stretch")
 
 
@@ -516,12 +523,11 @@ def main() -> None:
         st.caption("Available metadata columns: " + ", ".join(obs_cols))
 
         st.subheader(f"UMAP colored by metadata: {color_by}")
-        render_umap(plot_df, color=color_by, title=f"UMAP • {color_by}")
+        render_umap(plot_df, color=color_by, title=f"UMAP • {color_by}", height=640)
 
     elif module == "Gene Query Module":
         st.subheader("Gene Query Module")
-        st.caption("Includes: expression UMAP overlay, cell_type violin plot, and condition-level dot/violin plots.")
-        st.subheader("UMAP colored by gene expression")
+        st.caption("Compact layout: expression UMAP + cell_type violin on top, condition dot/violin below.")
         if gene_query:
             try:
                 expr_matrix, gene_names, gene_metadata = get_expression_source(adata, expression_source)
@@ -536,13 +542,6 @@ def main() -> None:
                     plot_df["gene_expression"] = extract_gene_for_indices(
                         expr_matrix, gene_idx, plotted_indices
                     )
-                    render_umap(
-                        plot_df,
-                        color="gene_expression",
-                        title=f"UMAP • {gene_query} expression ({expression_source})",
-                        continuous=True,
-                    )
-
                     analysis_indices = filtered_indices
                     analysis_df = adata.obs.iloc[analysis_indices][["cell_type", "condition"]].copy()
                     analysis_df["cell_type"] = analysis_df["cell_type"].astype(str)
@@ -551,18 +550,28 @@ def main() -> None:
                         expr_matrix, gene_idx, analysis_indices
                     )
 
-                    st.subheader(f"{gene_query} expression by cell_type (violin)")
-                    render_violin(
-                        analysis_df,
-                        x="cell_type",
-                        y="gene_expression",
-                        color="cell_type",
-                        title=f"{gene_query} expression across cell types",
-                    )
+                    top_left, top_right = st.columns([1.25, 1.0])
+                    with top_left:
+                        render_umap(
+                            plot_df,
+                            color="gene_expression",
+                            title=f"UMAP • {gene_query} expression ({expression_source})",
+                            continuous=True,
+                            height=500,
+                        )
+                    with top_right:
+                        render_violin(
+                            analysis_df,
+                            x="cell_type",
+                            y="gene_expression",
+                            color="cell_type",
+                            title=f"{gene_query} expression across cell types",
+                            height=500,
+                        )
 
                     st.subheader(f"{gene_query} expression in different conditions")
-                    c1, c2 = st.columns(2)
-                    with c1:
+                    bottom_left, bottom_right = st.columns(2)
+                    with bottom_left:
                         cond_stats = build_group_expression_stats(
                             analysis_df, group_col="condition", expr_col="gene_expression"
                         )
@@ -573,14 +582,16 @@ def main() -> None:
                             size="pct_expressing",
                             color="condition",
                             title=f"{gene_query} condition dot plot (size=% expressing)",
+                            height=360,
                         )
-                    with c2:
+                    with bottom_right:
                         render_violin(
                             analysis_df,
                             x="condition",
                             y="gene_expression",
                             color="condition",
                             title=f"{gene_query} condition violin plot",
+                            height=360,
                         )
             except ValueError as exc:
                 st.error(str(exc))

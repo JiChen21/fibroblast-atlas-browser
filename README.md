@@ -9,6 +9,7 @@ A lightweight, production-friendly Streamlit app for exploring a single-cell Ann
 - On-demand single-gene expression overlay.
 - Structured interface with dedicated Home / Metadata Explorer / Gene Query / Data Dictionary modules.
 - Contextual sidebar controls are shown only in analysis modules (hidden on Home).
+- Gene Query module uses a compact two-row layout to reduce scrolling.
 - Multi-select metadata filters for common fibroblast atlas fields.
 - Optional downsampling for responsive large-scale plotting.
 - Data dictionary tab (`obs` column names + dtypes).
