@@ -116,7 +116,7 @@ def build_mock_adata(n_cells: int = 3000, n_genes: int = 80) -> ad.AnnData:
     return adata
 
 
-@st.cache_resource(show_spinner=False)
+@st.cache_resource(show_spinner="Loading AnnData dataset...")
 def load_adata(path: str) -> Tuple[ad.AnnData, bool, str]:
     try:
         if path and os.path.exists(path):
@@ -223,7 +223,7 @@ def render_umap(
         font={"color": "#111827"},
     )
     fig.update_yaxes(scaleanchor="x", scaleratio=1)
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, width="stretch", theme=None)
 
 
 def render_violin(
@@ -258,7 +258,7 @@ def render_violin(
         plot_bgcolor="#ffffff",
         font={"color": "#111827"},
     )
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, width="stretch", theme=None)
 
 
 def build_group_expression_stats(df: pd.DataFrame, group_col: str, expr_col: str) -> pd.DataFrame:
@@ -316,7 +316,7 @@ def render_dotplot(
         plot_bgcolor="#ffffff",
         font={"color": "#111827"},
     )
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, width="stretch", theme=None)
 
 
 def apply_global_styles() -> None:
@@ -536,9 +536,10 @@ def main() -> None:
                 "Downsampled mode improves interaction speed."
             )
 
-        umap_df = get_umap_df(adata)
-        plot_df = umap_df.iloc[plotted_indices].copy()
-        plot_df[color_by] = adata.obs.iloc[plotted_indices][color_by].astype(str).to_numpy()
+        with st.spinner("Preparing metadata visualization..."):
+            umap_df = get_umap_df(adata)
+            plot_df = umap_df.iloc[plotted_indices].copy()
+            plot_df[color_by] = adata.obs.iloc[plotted_indices][color_by].astype(str).to_numpy()
 
         st.subheader("Dataset summary")
         c1, c2, c3 = st.columns(3)
@@ -555,73 +556,74 @@ def main() -> None:
         st.caption("Compact layout: expression UMAP + cell_type violin on top, condition dot/violin below.")
         if gene_query:
             try:
-                expr_matrix, gene_names, gene_metadata = get_expression_source(adata, expression_source)
-                gene_idx = resolve_gene_index(gene_query, "var_names", gene_names, gene_metadata)
-                if gene_idx is None:
-                    logger.info("Gene query miss source=%s query=%s", expression_source, gene_query)
-                    st.error(
-                        f"Gene '{gene_query}' was not found in var_names for source '{expression_source}'."
-                    )
-                else:
-                    umap_df = get_umap_df(adata)
-                    plot_df = umap_df.iloc[plotted_indices].copy()
-                    plot_df["gene_expression"] = extract_gene_for_indices(
-                        expr_matrix, gene_idx, plotted_indices
-                    )
-                    analysis_indices = filtered_indices
-                    analysis_df = adata.obs.iloc[analysis_indices][["cell_type", "condition"]].copy()
-                    analysis_df["cell_type"] = analysis_df["cell_type"].astype(str)
-                    analysis_df["condition"] = analysis_df["condition"].astype(str)
-                    analysis_df["gene_expression"] = extract_gene_for_indices(
-                        expr_matrix, gene_idx, analysis_indices
-                    )
-
-                    top_left, top_right = st.columns(2)
-                    with top_left:
-                        render_umap(
-                            plot_df,
-                            color="gene_expression",
-                            title=f"UMAP • {gene_query} expression ({expression_source})",
-                            continuous=True,
-                            height=500,
+                with st.spinner(f"Querying gene '{gene_query}' and rendering plots..."):
+                    expr_matrix, gene_names, gene_metadata = get_expression_source(adata, expression_source)
+                    gene_idx = resolve_gene_index(gene_query, "var_names", gene_names, gene_metadata)
+                    if gene_idx is None:
+                        logger.info("Gene query miss source=%s query=%s", expression_source, gene_query)
+                        st.error(
+                            f"Gene '{gene_query}' was not found in var_names for source '{expression_source}'."
                         )
-                    with top_right:
-                        render_violin(
-                            analysis_df,
-                            x="cell_type",
-                            y="gene_expression",
-                            color="cell_type",
-                            title=f"{gene_query} expression across cell types",
-                            height=500,
-                            show_legend=False,
+                    else:
+                        umap_df = get_umap_df(adata)
+                        plot_df = umap_df.iloc[plotted_indices].copy()
+                        plot_df["gene_expression"] = extract_gene_for_indices(
+                            expr_matrix, gene_idx, plotted_indices
+                        )
+                        analysis_indices = filtered_indices
+                        analysis_df = adata.obs.iloc[analysis_indices][["cell_type", "condition"]].copy()
+                        analysis_df["cell_type"] = analysis_df["cell_type"].astype(str)
+                        analysis_df["condition"] = analysis_df["condition"].astype(str)
+                        analysis_df["gene_expression"] = extract_gene_for_indices(
+                            expr_matrix, gene_idx, analysis_indices
                         )
 
-                    st.subheader(f"{gene_query} expression in different conditions")
-                    bottom_left, bottom_right = st.columns(2)
-                    with bottom_left:
-                        cond_stats = build_group_expression_stats(
-                            analysis_df, group_col="condition", expr_col="gene_expression"
-                        )
-                        render_dotplot(
-                            cond_stats,
-                            x="condition",
-                            y="mean_expression",
-                            size="pct_expressing",
-                            color="condition",
-                            title=f"{gene_query} condition dot plot (size=% expressing)",
-                            height=360,
-                            show_legend=False,
-                        )
-                    with bottom_right:
-                        render_violin(
-                            analysis_df,
-                            x="condition",
-                            y="gene_expression",
-                            color="condition",
-                            title=f"{gene_query} condition violin plot",
-                            height=360,
-                            show_legend=False,
-                        )
+                        top_left, top_right = st.columns(2)
+                        with top_left:
+                            render_umap(
+                                plot_df,
+                                color="gene_expression",
+                                title=f"UMAP • {gene_query} expression ({expression_source})",
+                                continuous=True,
+                                height=500,
+                            )
+                        with top_right:
+                            render_violin(
+                                analysis_df,
+                                x="cell_type",
+                                y="gene_expression",
+                                color="cell_type",
+                                title=f"{gene_query} expression across cell types",
+                                height=500,
+                                show_legend=False,
+                            )
+
+                        st.subheader(f"{gene_query} expression in different conditions")
+                        bottom_left, bottom_right = st.columns(2)
+                        with bottom_left:
+                            cond_stats = build_group_expression_stats(
+                                analysis_df, group_col="condition", expr_col="gene_expression"
+                            )
+                            render_dotplot(
+                                cond_stats,
+                                x="condition",
+                                y="mean_expression",
+                                size="pct_expressing",
+                                color="condition",
+                                title=f"{gene_query} condition dot plot (size=% expressing)",
+                                height=360,
+                                show_legend=False,
+                            )
+                        with bottom_right:
+                            render_violin(
+                                analysis_df,
+                                x="condition",
+                                y="gene_expression",
+                                color="condition",
+                                title=f"{gene_query} condition violin plot",
+                                height=360,
+                                show_legend=False,
+                            )
             except ValueError as exc:
                 st.error(str(exc))
             except KeyError as exc:
