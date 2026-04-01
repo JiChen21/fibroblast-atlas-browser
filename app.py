@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Dict, List, Optional, Tuple
 
@@ -7,6 +8,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 from scipy import sparse
+from core import apply_filters, choose_plot_indices, resolve_gene_index, validate_core_metadata
 
 DEFAULT_H5AD_PATH = "./data/FBs_adata.h5ad"
 DEFAULT_MAX_POINTS = int(os.getenv("UMAP_MAX_POINTS", "200000"))
@@ -23,7 +25,6 @@ FILTER_COLUMNS = [
     "leiden",
     "leiden_default",
 ]
-CORE_REQUIRED_OBS = ["cell_type", "condition"]
 CELL_TYPE_ORDER = [
     "F1_Basal",
     "F2_PSL",
@@ -62,6 +63,13 @@ CONDITION_COLOR_MAP = {
     "HF": "#c51b7d",
     "COVID19": "#17becf",
 }
+
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    logging.basicConfig(
+        level=os.getenv("LOG_LEVEL", "INFO").upper(),
+        format="%(asctime)s %(levelname)s %(name)s - %(message)s",
+    )
 
 
 def build_mock_adata(n_cells: int = 3000, n_genes: int = 80) -> ad.AnnData:
@@ -106,13 +114,16 @@ def build_mock_adata(n_cells: int = 3000, n_genes: int = 80) -> ad.AnnData:
 def load_adata(path: str) -> Tuple[ad.AnnData, bool, str]:
     try:
         if path and os.path.exists(path):
+            logger.info("Loading dataset from %s", path)
             return ad.read_h5ad(path), False, path
         msg = (
             f"H5AD file not found at '{path}'. Running in DEMO mode with synthetic data. "
             "Set H5AD_PATH to your real dataset path."
         )
+        logger.warning(msg)
         return build_mock_adata(), True, msg
     except Exception as exc:  # pragma: no cover
+        logger.exception("Failed to load dataset from %s", path)
         return build_mock_adata(), True, f"Failed loading '{path}' ({exc}). Running in DEMO mode."
 
 
@@ -133,96 +144,6 @@ def get_filter_options(adata: ad.AnnData, columns: Tuple[str, ...]) -> Dict[str,
         if col in adata.obs.columns:
             out[col] = sorted(adata.obs[col].astype(str).dropna().unique().tolist())
     return out
-
-
-def apply_filters(adata: ad.AnnData, selected_filters: Dict[str, List[str]]) -> np.ndarray:
-    mask = np.ones(adata.n_obs, dtype=bool)
-    for col, chosen in selected_filters.items():
-        if chosen and col in adata.obs.columns:
-            mask &= adata.obs[col].astype(str).isin(chosen).to_numpy()
-    return mask
-
-
-def choose_plot_indices(
-    filtered_indices: np.ndarray,
-    view_mode: str,
-    max_points: int,
-    strata_values: Optional[np.ndarray] = None,
-    random_seed: int = 42,
-) -> Tuple[np.ndarray, str]:
-    n_filtered = filtered_indices.size
-    if n_filtered == 0:
-        return filtered_indices, "No cells matched the current filters."
-
-    use_downsample = view_mode == "Downsampled"
-    if view_mode == "Auto":
-        use_downsample = n_filtered > max_points
-
-    if use_downsample and n_filtered > max_points:
-        if strata_values is not None and strata_values.size == n_filtered:
-            selected = stratified_sample_indices(
-                filtered_indices=filtered_indices,
-                strata_values=strata_values,
-                max_points=max_points,
-                random_seed=random_seed,
-            )
-            return selected, f"Displaying {max_points:,}/{n_filtered:,} filtered cells (stratified downsampled)."
-        rng = np.random.default_rng(random_seed)
-        selected = np.sort(rng.choice(filtered_indices, size=max_points, replace=False))
-        return selected, f"Displaying {max_points:,}/{n_filtered:,} filtered cells (downsampled)."
-
-    return filtered_indices, f"Displaying all {n_filtered:,} filtered cells."
-
-
-def stratified_sample_indices(
-    filtered_indices: np.ndarray,
-    strata_values: np.ndarray,
-    max_points: int,
-    random_seed: int = 42,
-) -> np.ndarray:
-    """Proportionally downsample while preserving group composition when possible."""
-    rng = np.random.default_rng(random_seed)
-    strata_values = strata_values.astype(str)
-    unique_groups, inverse = np.unique(strata_values, return_inverse=True)
-    group_positions = [np.flatnonzero(inverse == i) for i in range(len(unique_groups))]
-    group_sizes = np.array([len(pos) for pos in group_positions], dtype=int)
-    n_total = int(group_sizes.sum())
-    if n_total <= max_points:
-        return filtered_indices
-
-    exact_alloc = group_sizes / n_total * max_points
-    alloc = np.floor(exact_alloc).astype(int)
-    alloc = np.minimum(alloc, group_sizes)
-
-    remainder = max_points - int(alloc.sum())
-    if remainder > 0:
-        frac = exact_alloc - np.floor(exact_alloc)
-        order = np.argsort(-frac)
-        for idx in order:
-            if remainder == 0:
-                break
-            if alloc[idx] < group_sizes[idx]:
-                alloc[idx] += 1
-                remainder -= 1
-
-    selected_parts: List[np.ndarray] = []
-    for i, pos in enumerate(group_positions):
-        take = int(alloc[i])
-        if take <= 0:
-            continue
-        if take >= len(pos):
-            picked_pos = pos
-        else:
-            picked_pos = rng.choice(pos, size=take, replace=False)
-        selected_parts.append(filtered_indices[np.sort(picked_pos)])
-
-    if not selected_parts:
-        return np.sort(rng.choice(filtered_indices, size=max_points, replace=False))
-    return np.sort(np.concatenate(selected_parts))
-
-
-def validate_core_metadata(adata: ad.AnnData) -> List[str]:
-    return [col for col in CORE_REQUIRED_OBS if col not in adata.obs.columns]
 
 
 def get_expression_source_options(adata: ad.AnnData) -> List[str]:
@@ -249,29 +170,6 @@ def get_expression_source(adata: ad.AnnData, source_key: str) -> Tuple[object, p
         return adata.layers[layer_name], adata.var_names, adata.var
 
     raise ValueError(f"Unknown expression source '{source_key}'.")
-
-
-def resolve_gene_index(
-    query: str,
-    gene_id_field: str,
-    gene_names: pd.Index,
-    gene_metadata: pd.DataFrame,
-) -> Optional[int]:
-    if not query:
-        return None
-
-    if gene_id_field == "var_names":
-        if query in gene_names:
-            return int(gene_names.get_loc(query))
-        return None
-
-    if gene_id_field not in gene_metadata.columns:
-        return None
-
-    matches = np.flatnonzero(gene_metadata[gene_id_field].astype(str).to_numpy() == query)
-    if len(matches) == 0:
-        return None
-    return int(matches[0])
 
 
 def extract_gene_for_indices(matrix: object, gene_idx: int, obs_indices: np.ndarray) -> np.ndarray:
@@ -418,7 +316,7 @@ def main() -> None:
         st.error("Missing required UMAP embedding: adata.obsm['X_umap'].")
         st.stop()
 
-    missing_core_obs = validate_core_metadata(adata)
+    missing_core_obs = validate_core_metadata(adata.obs)
     if missing_core_obs:
         st.error(
             "Dataset is missing required metadata columns for this app: "
@@ -488,7 +386,7 @@ def main() -> None:
                     help="Gene names are resolved directly from adata.var_names.",
                 ).strip()
 
-    filter_mask = apply_filters(adata, selected_filters)
+    filter_mask = apply_filters(adata.obs, selected_filters)
     filtered_indices = np.flatnonzero(filter_mask)
     n_selected = int(filtered_indices.size)
 
@@ -500,6 +398,14 @@ def main() -> None:
             strata_values = adata.obs.iloc[filtered_indices]["condition"].astype(str).to_numpy()
 
     plotted_indices, view_msg = choose_plot_indices(filtered_indices, view_mode, max_points, strata_values=strata_values)
+    logger.info(
+        "View mode=%s filtered=%d plotted=%d max_points=%d module=%s",
+        view_mode,
+        n_selected,
+        int(plotted_indices.size),
+        max_points,
+        module,
+    )
 
     if module == "Home":
         st.subheader("Atlas overview")
@@ -557,6 +463,7 @@ def main() -> None:
                 expr_matrix, gene_names, gene_metadata = get_expression_source(adata, expression_source)
                 gene_idx = resolve_gene_index(gene_query, "var_names", gene_names, gene_metadata)
                 if gene_idx is None:
+                    logger.info("Gene query miss source=%s query=%s", expression_source, gene_query)
                     st.error(
                         f"Gene '{gene_query}' was not found in var_names for source '{expression_source}'."
                     )
