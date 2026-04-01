@@ -10,6 +10,7 @@ from scipy import sparse
 
 DEFAULT_H5AD_PATH = "./data/FBs_adata.h5ad"
 DEFAULT_MAX_POINTS = int(os.getenv("UMAP_MAX_POINTS", "200000"))
+STRICT_DATA_MODE = os.getenv("STRICT_DATA", "false").strip().lower() in {"1", "true", "yes", "on"}
 FILTER_COLUMNS = [
     "condition",
     "region",
@@ -22,6 +23,21 @@ FILTER_COLUMNS = [
     "leiden",
     "leiden_default",
 ]
+CORE_REQUIRED_OBS = ["cell_type", "condition"]
+CELL_TYPE_ORDER = [
+    "F1_Basal",
+    "F2_PSL",
+    "F3_Int",
+    "F4_Act",
+    "F5_ECM",
+    "F6_SLIT3+",
+    "F7_Inflam",
+    "F8_ITM2B+",
+    "F9_Mech",
+    "F10_CML",
+    "F11_ECL",
+]
+CONDITION_ORDER = ["CTRL", "HCM", "ACM", "AS", "AMI", "ICM", "DCM", "HF", "COVID19"]
 CELL_TYPE_COLOR_MAP = {
     "F1_Basal": "#8dd3c7",
     "F2_PSL": "#ffffb3",
@@ -40,7 +56,7 @@ CONDITION_COLOR_MAP = {
     "HCM": "#fdb462",
     "ACM": "#fccde5",
     "AS": "#fee090",
-    "MI": "#d6604d",
+    "AMI": "#d6604d",
     "ICM": "#1d91c0",
     "DCM": "#fb8072",
     "HF": "#c51b7d",
@@ -131,6 +147,7 @@ def choose_plot_indices(
     filtered_indices: np.ndarray,
     view_mode: str,
     max_points: int,
+    strata_values: Optional[np.ndarray] = None,
     random_seed: int = 42,
 ) -> Tuple[np.ndarray, str]:
     n_filtered = filtered_indices.size
@@ -142,11 +159,70 @@ def choose_plot_indices(
         use_downsample = n_filtered > max_points
 
     if use_downsample and n_filtered > max_points:
+        if strata_values is not None and strata_values.size == n_filtered:
+            selected = stratified_sample_indices(
+                filtered_indices=filtered_indices,
+                strata_values=strata_values,
+                max_points=max_points,
+                random_seed=random_seed,
+            )
+            return selected, f"Displaying {max_points:,}/{n_filtered:,} filtered cells (stratified downsampled)."
         rng = np.random.default_rng(random_seed)
         selected = np.sort(rng.choice(filtered_indices, size=max_points, replace=False))
         return selected, f"Displaying {max_points:,}/{n_filtered:,} filtered cells (downsampled)."
 
     return filtered_indices, f"Displaying all {n_filtered:,} filtered cells."
+
+
+def stratified_sample_indices(
+    filtered_indices: np.ndarray,
+    strata_values: np.ndarray,
+    max_points: int,
+    random_seed: int = 42,
+) -> np.ndarray:
+    """Proportionally downsample while preserving group composition when possible."""
+    rng = np.random.default_rng(random_seed)
+    strata_values = strata_values.astype(str)
+    unique_groups, inverse = np.unique(strata_values, return_inverse=True)
+    group_positions = [np.flatnonzero(inverse == i) for i in range(len(unique_groups))]
+    group_sizes = np.array([len(pos) for pos in group_positions], dtype=int)
+    n_total = int(group_sizes.sum())
+    if n_total <= max_points:
+        return filtered_indices
+
+    exact_alloc = group_sizes / n_total * max_points
+    alloc = np.floor(exact_alloc).astype(int)
+    alloc = np.minimum(alloc, group_sizes)
+
+    remainder = max_points - int(alloc.sum())
+    if remainder > 0:
+        frac = exact_alloc - np.floor(exact_alloc)
+        order = np.argsort(-frac)
+        for idx in order:
+            if remainder == 0:
+                break
+            if alloc[idx] < group_sizes[idx]:
+                alloc[idx] += 1
+                remainder -= 1
+
+    selected_parts: List[np.ndarray] = []
+    for i, pos in enumerate(group_positions):
+        take = int(alloc[i])
+        if take <= 0:
+            continue
+        if take >= len(pos):
+            picked_pos = pos
+        else:
+            picked_pos = rng.choice(pos, size=take, replace=False)
+        selected_parts.append(filtered_indices[np.sort(picked_pos)])
+
+    if not selected_parts:
+        return np.sort(rng.choice(filtered_indices, size=max_points, replace=False))
+    return np.sort(np.concatenate(selected_parts))
+
+
+def validate_core_metadata(adata: ad.AnnData) -> List[str]:
+    return [col for col in CORE_REQUIRED_OBS if col not in adata.obs.columns]
 
 
 def get_expression_source_options(adata: ad.AnnData) -> List[str]:
@@ -214,7 +290,13 @@ def get_discrete_color_map(column_name: str) -> Optional[Dict[str, str]]:
     return None
 
 
-def render_umap(df: pd.DataFrame, color: str, title: str, continuous: bool = False) -> None:
+def render_umap(
+    df: pd.DataFrame,
+    color: str,
+    title: str,
+    continuous: bool = False,
+    height: int = 620,
+) -> None:
     discrete_color_map = None if continuous else get_discrete_color_map(color)
     fig = px.scatter(
         df,
@@ -229,12 +311,11 @@ def render_umap(df: pd.DataFrame, color: str, title: str, continuous: bool = Fal
     )
     fig.update_traces(marker={"size": 3})
     fig.update_layout(
-        height=820,
-        width=820,
+        height=height,
         legend={"itemsizing": "constant"},
     )
     fig.update_yaxes(scaleanchor="x", scaleratio=1)
-    st.plotly_chart(fig, width="content")
+    st.plotly_chart(fig, width="stretch")
 
 
 def render_violin(
@@ -243,6 +324,8 @@ def render_violin(
     y: str,
     title: str,
     color: Optional[str] = None,
+    height: int = 420,
+    show_legend: bool = True,
 ) -> None:
     color_discrete_map = get_discrete_color_map(color) if color else None
     fig = px.violin(
@@ -251,11 +334,15 @@ def render_violin(
         y=y,
         color=color,
         color_discrete_map=color_discrete_map,
+        category_orders={
+            "cell_type": CELL_TYPE_ORDER,
+            "condition": CONDITION_ORDER,
+        },
         box=True,
         points=False,
         title=title,
     )
-    fig.update_layout(height=520)
+    fig.update_layout(height=height, showlegend=show_legend)
     st.plotly_chart(fig, width="stretch")
 
 
@@ -281,6 +368,8 @@ def render_dotplot(
     size: str,
     color: str,
     title: str,
+    height: int = 380,
+    show_legend: bool = True,
 ) -> None:
     color_discrete_map = None
     color_continuous_scale = None
@@ -297,92 +386,148 @@ def render_dotplot(
         color=color,
         color_discrete_map=color_discrete_map,
         color_continuous_scale=color_continuous_scale,
+        category_orders={
+            "cell_type": CELL_TYPE_ORDER,
+            "condition": CONDITION_ORDER,
+        },
         title=title,
         hover_data={"mean_expression": ":.4f", "median_expression": ":.4f", "pct_expressing": ":.2f", "n_cells": True},
     )
-    fig.update_layout(height=460)
+    fig.update_layout(height=height, showlegend=show_legend)
     st.plotly_chart(fig, width="stretch")
 
 
 def main() -> None:
     st.set_page_config(page_title="Single-cell AnnData Explorer", layout="wide")
-    st.title("Single-cell AnnData Explorer")
+    st.title("Cross-disease Human Heart Fibroblast Atlas")
 
     default_path = os.getenv("H5AD_PATH", DEFAULT_H5AD_PATH)
+    adata, is_demo, status_msg = load_adata(default_path)
+    if STRICT_DATA_MODE and is_demo:
+        st.error(
+            "STRICT_DATA is enabled. Failed to load a valid dataset from H5AD_PATH; "
+            "demo fallback is disabled."
+        )
+        st.caption(status_msg)
+        st.stop()
 
-    with st.sidebar:
-        st.header("Controls")
-        h5ad_path = st.text_input("Dataset path", value=default_path)
-
-    adata, is_demo, status_msg = load_adata(h5ad_path)
     if is_demo:
         st.warning(f"DEMO MODE: {status_msg}")
-    else:
-        st.success(f"Loaded dataset from: {status_msg}")
 
     if "X_umap" not in adata.obsm:
         st.error("Missing required UMAP embedding: adata.obsm['X_umap'].")
         st.stop()
 
+    missing_core_obs = validate_core_metadata(adata)
+    if missing_core_obs:
+        st.error(
+            "Dataset is missing required metadata columns for this app: "
+            + ", ".join(missing_core_obs)
+            + "."
+        )
+        st.caption("Please provide these columns in adata.obs before using this portal.")
+        st.stop()
+
     obs_cols = adata.obs.columns.astype(str).tolist()
     color_candidates = obs_cols if obs_cols else ["None"]
     filter_options = get_filter_options(adata, tuple(FILTER_COLUMNS))
+    module = st.radio(
+        "Navigation",
+        ["Home", "Metadata Explorer", "Gene Query Module", "Data Dictionary"],
+        horizontal=True,
+        label_visibility="collapsed",
+    )
 
-    with st.sidebar:
-        color_by = st.selectbox(
-            "Metadata color selector",
-            options=color_candidates,
-            index=color_candidates.index("cell_type") if "cell_type" in color_candidates else 0,
-        )
+    color_by = "cell_type" if "cell_type" in color_candidates else color_candidates[0]
+    selected_filters: Dict[str, List[str]] = {}
+    view_mode = "Auto"
+    max_points = min(DEFAULT_MAX_POINTS, max(10000, adata.n_obs))
+    expression_source = "X"
+    gene_query = ""
 
-        st.subheader("Filters")
-        if st.button("Reset filters", width="stretch"):
-            for col in filter_options:
-                st.session_state[f"filter_{col}"] = []
-
-        selected_filters: Dict[str, List[str]] = {}
-        for col, options in filter_options.items():
-            key = f"filter_{col}"
-            if key not in st.session_state:
-                st.session_state[key] = []
-            selected_filters[col] = st.multiselect(col, options=options, key=key)
-
-        st.subheader("Visualization performance")
-        view_mode = st.radio("UMAP view mode", ["Auto", "Downsampled", "Full"], index=0)
-        max_points = int(
-            st.number_input(
-                "Display point cap",
-                min_value=10000,
-                max_value=max(10000, adata.n_obs),
-                value=min(DEFAULT_MAX_POINTS, max(10000, adata.n_obs)),
-                step=10000,
-                help="Used in Auto/Downsampled mode to keep plotting responsive.",
+    if module in {"Metadata Explorer", "Gene Query Module"}:
+        with st.sidebar:
+            st.header(f"{module} controls")
+            color_by = st.selectbox(
+                "Metadata color selector",
+                options=color_candidates,
+                index=color_candidates.index(color_by) if color_by in color_candidates else 0,
             )
-        )
 
-        st.subheader("Gene query")
-        expression_source = st.selectbox("Expression source", options=get_expression_source_options(adata))
-        gene_id_options = ["var_names"] + adata.var.columns.astype(str).tolist()
-        gene_id_field = st.selectbox(
-            "Gene identifier field",
-            options=gene_id_options,
-            help="Default is adata.var_names. Use a var column if you keep alternate gene IDs.",
-        )
-        gene_query = st.text_input(
-            "Gene search box",
-            value="",
-            placeholder="e.g., COL1A1",
-            help="Gene names are resolved from var_names by default.",
-        ).strip()
+            st.subheader("Filters")
+            if st.button("Reset filters", width="stretch"):
+                for col in filter_options:
+                    st.session_state[f"filter_{col}"] = []
+
+            for col, options in filter_options.items():
+                key = f"filter_{col}"
+                if key not in st.session_state:
+                    st.session_state[key] = []
+                selected_filters[col] = st.multiselect(col, options=options, key=key)
+
+            st.subheader("Visualization performance")
+            view_mode = st.radio("UMAP view mode", ["Auto", "Downsampled", "Full"], index=0)
+            max_points = int(
+                st.number_input(
+                    "Display point cap",
+                    min_value=10000,
+                    max_value=max(10000, adata.n_obs),
+                    value=min(DEFAULT_MAX_POINTS, max(10000, adata.n_obs)),
+                    step=10000,
+                    help="Used in Auto/Downsampled mode to keep plotting responsive.",
+                )
+            )
+
+            if module == "Gene Query Module":
+                st.subheader("Gene query")
+                expression_source = st.selectbox("Expression source", options=get_expression_source_options(adata))
+                gene_query = st.text_input(
+                    "Gene search box",
+                    value="",
+                    placeholder="e.g., COL1A1",
+                    help="Gene names are resolved directly from adata.var_names.",
+                ).strip()
 
     filter_mask = apply_filters(adata, selected_filters)
     filtered_indices = np.flatnonzero(filter_mask)
     n_selected = int(filtered_indices.size)
 
-    plotted_indices, view_msg = choose_plot_indices(filtered_indices, view_mode, max_points)
+    strata_values = None
+    if filtered_indices.size > 0:
+        if "cell_type" in adata.obs.columns:
+            strata_values = adata.obs.iloc[filtered_indices]["cell_type"].astype(str).to_numpy()
+        elif "condition" in adata.obs.columns:
+            strata_values = adata.obs.iloc[filtered_indices]["condition"].astype(str).to_numpy()
 
-    tabs = st.tabs(["Explorer", "Data dictionary"])
-    with tabs[0]:
+    plotted_indices, view_msg = choose_plot_indices(filtered_indices, view_mode, max_points, strata_values=strata_values)
+
+    if module == "Home":
+        st.subheader("Atlas overview")
+        st.markdown(
+            """
+            Cardiac fibroblasts are central regulators of extracellular matrix remodeling and fibrosis across diverse
+            heart diseases, yet their heterogeneity and shared disease-associated states remain incompletely defined.
+
+            This atlas curates and integrates 21 publicly available human heart single-cell and single-nucleus
+            transcriptomic datasets, comprising approximately 730,000 fibroblasts from control hearts and eight disease
+            conditions: hypertrophic cardiomyopathy (HCM), arrhythmogenic cardiomyopathy (ACM), aortic stenosis (AS),
+            myocardial infarction (MI), ischemic cardiomyopathy (ICM), dilated cardiomyopathy (DCM), heart failure (HF),
+            and COVID-19-associated cardiac injury.
+
+            The portal is designed as an interactive resource for exploring fibroblast subtypes, gene expression
+            patterns, and cross-disease fibroblast remodeling in the human heart.
+            """
+        )
+        st.subheader("How to use this portal")
+        st.markdown(
+            """
+            1. Use **Metadata Explorer** to inspect UMAP distributions and subset cells with sidebar filters.  
+            2. Use **Gene Query Module** to visualize gene expression on UMAP and compare cell_type/condition-level patterns.  
+            3. Use **Data Dictionary** to inspect available metadata columns and dtypes.
+            """
+        )
+    elif module == "Metadata Explorer":
+        st.subheader("Metadata Explorer")
         st.info(view_msg)
         if view_mode != "Full":
             st.caption(
@@ -401,38 +546,26 @@ def main() -> None:
         c3.metric("Cells after filters", f"{n_selected:,}")
         st.caption("Available metadata columns: " + ", ".join(obs_cols))
 
-        st.subheader("About this dataset")
-        st.markdown(
-            """
-            This portal visualizes one AnnData (`.h5ad`) file with precomputed UMAP coordinates.
-            It supports metadata coloring, metadata filters, and on-demand single-gene overlays.
-            For large datasets, the app can display a capped random subset of cells for smoother plotting.
-            """
-        )
-
         st.subheader(f"UMAP colored by metadata: {color_by}")
-        render_umap(plot_df, color=color_by, title=f"UMAP • {color_by}")
+        render_umap(plot_df, color=color_by, title=f"UMAP • {color_by}", height=640)
 
-        st.subheader("UMAP colored by gene expression")
+    elif module == "Gene Query Module":
+        st.subheader("Gene Query Module")
+        st.caption("Compact layout: expression UMAP + cell_type violin on top, condition dot/violin below.")
         if gene_query:
             try:
                 expr_matrix, gene_names, gene_metadata = get_expression_source(adata, expression_source)
-                gene_idx = resolve_gene_index(gene_query, gene_id_field, gene_names, gene_metadata)
+                gene_idx = resolve_gene_index(gene_query, "var_names", gene_names, gene_metadata)
                 if gene_idx is None:
                     st.error(
-                        f"Gene '{gene_query}' was not found using '{gene_id_field}' in source '{expression_source}'."
+                        f"Gene '{gene_query}' was not found in var_names for source '{expression_source}'."
                     )
                 else:
+                    umap_df = get_umap_df(adata)
+                    plot_df = umap_df.iloc[plotted_indices].copy()
                     plot_df["gene_expression"] = extract_gene_for_indices(
                         expr_matrix, gene_idx, plotted_indices
                     )
-                    render_umap(
-                        plot_df,
-                        color="gene_expression",
-                        title=f"UMAP • {gene_query} expression ({expression_source})",
-                        continuous=True,
-                    )
-
                     analysis_indices = filtered_indices
                     analysis_df = adata.obs.iloc[analysis_indices][["cell_type", "condition"]].copy()
                     analysis_df["cell_type"] = analysis_df["cell_type"].astype(str)
@@ -441,18 +574,29 @@ def main() -> None:
                         expr_matrix, gene_idx, analysis_indices
                     )
 
-                    st.subheader(f"{gene_query} expression by cell_type (violin)")
-                    render_violin(
-                        analysis_df,
-                        x="cell_type",
-                        y="gene_expression",
-                        color="cell_type",
-                        title=f"{gene_query} expression across cell types",
-                    )
+                    top_left, top_right = st.columns(2)
+                    with top_left:
+                        render_umap(
+                            plot_df,
+                            color="gene_expression",
+                            title=f"UMAP • {gene_query} expression ({expression_source})",
+                            continuous=True,
+                            height=500,
+                        )
+                    with top_right:
+                        render_violin(
+                            analysis_df,
+                            x="cell_type",
+                            y="gene_expression",
+                            color="cell_type",
+                            title=f"{gene_query} expression across cell types",
+                            height=500,
+                            show_legend=False,
+                        )
 
                     st.subheader(f"{gene_query} expression in different conditions")
-                    c1, c2 = st.columns(2)
-                    with c1:
+                    bottom_left, bottom_right = st.columns(2)
+                    with bottom_left:
                         cond_stats = build_group_expression_stats(
                             analysis_df, group_col="condition", expr_col="gene_expression"
                         )
@@ -463,14 +607,18 @@ def main() -> None:
                             size="pct_expressing",
                             color="condition",
                             title=f"{gene_query} condition dot plot (size=% expressing)",
+                            height=480,
+                            show_legend=False,
                         )
-                    with c2:
+                    with bottom_right:
                         render_violin(
                             analysis_df,
                             x="condition",
                             y="gene_expression",
                             color="condition",
                             title=f"{gene_query} condition violin plot",
+                            height=480,
+                            show_legend=False,
                         )
             except ValueError as exc:
                 st.error(str(exc))
@@ -482,7 +630,7 @@ def main() -> None:
         else:
             st.info("Select a gene in the sidebar to display expression on UMAP.")
 
-    with tabs[1]:
+    elif module == "Data Dictionary":
         st.subheader("Data dictionary (obs)")
         data_dict = pd.DataFrame(
             {
