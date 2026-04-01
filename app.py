@@ -72,6 +72,19 @@ if not logger.handlers:
     )
 
 
+def resolve_home_image_path() -> Optional[str]:
+    configured = os.getenv("HOME_IMAGE_PATH", "").strip()
+    candidates = [
+        configured,
+        "./assets/home_overview.png",
+        "/data/chenji/fibroblast-atlas-browser-new/plot/home_page.jpg",
+    ]
+    for path in candidates:
+        if path and os.path.exists(path):
+            return path
+    return None
+
+
 def build_mock_adata(n_cells: int = 3000, n_genes: int = 80) -> ad.AnnData:
     """Create a lightweight synthetic AnnData so the UI can run without a real file."""
     rng = np.random.default_rng(42)
@@ -417,13 +430,27 @@ def main() -> None:
             This atlas curates and integrates 21 publicly available human heart single-cell and single-nucleus
             transcriptomic datasets, comprising approximately 730,000 fibroblasts from control hearts and eight disease
             conditions: hypertrophic cardiomyopathy (HCM), arrhythmogenic cardiomyopathy (ACM), aortic stenosis (AS),
-            myocardial infarction (MI), ischemic cardiomyopathy (ICM), dilated cardiomyopathy (DCM), heart failure (HF),
+            acute myocardial infarction (AMI), ischemic cardiomyopathy (ICM), dilated cardiomyopathy (DCM), heart failure (HF),
             and COVID-19-associated cardiac injury.
 
             The portal is designed as an interactive resource for exploring fibroblast subtypes, gene expression
             patterns, and cross-disease fibroblast remodeling in the human heart.
             """
         )
+        home_image_path = resolve_home_image_path()
+        if home_image_path:
+            logger.info("Using homepage image: %s", home_image_path)
+            st.image(
+                home_image_path,
+                caption="Fibroblast atlas overview figure",
+                use_container_width=True,
+            )
+        else:
+            st.caption(
+                "Tip: set `HOME_IMAGE_PATH` or place an image at "
+                "`./assets/home_overview.png` "
+                "(also supports `/data/chenji/fibroblast-atlas-browser-new/plot/home_page.jpg`)."
+            )
         st.subheader("How to use this portal")
         st.markdown(
             """

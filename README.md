@@ -22,6 +22,7 @@ A lightweight, production-friendly Streamlit app for exploring a single-cell Ann
 - `UMAP_MAX_POINTS` (default: `200000`)
 - `STRICT_DATA` (default: `false`; when `true`, app fails fast instead of using demo fallback)
 - `LOG_LEVEL` (default: `INFO`)
+- `HOME_IMAGE_PATH` (optional; if not set, app auto-checks `./assets/home_overview.png` then `/data/chenji/fibroblast-atlas-browser-new/plot/home_page.jpg`)
 
 > Do **not** commit real `.h5ad` files to GitHub.
 
@@ -76,6 +77,21 @@ This is a minimal smoke test to verify dataset compatibility before launching St
 pytest -q
 python -m py_compile app.py scripts/validate_h5ad.py core.py
 ```
+
+## Add an image to Home page
+
+1. Recommended: put your image file at `./assets/home_overview.png`.
+2. Or set `HOME_IMAGE_PATH` to any absolute path (for example `/data/chenji/fibroblast-atlas-browser-new/plot/home_page.jpg`).
+
+```bash
+export HOME_IMAGE_PATH=./assets/home_overview.png
+```
+
+If `HOME_IMAGE_PATH` is not set, the app will automatically check:
+- `./assets/home_overview.png`
+- `/data/chenji/fibroblast-atlas-browser-new/plot/home_page.jpg`
+
+If one exists, the app shows it on **Home** below the atlas overview text.
 
 ## Docker
 
