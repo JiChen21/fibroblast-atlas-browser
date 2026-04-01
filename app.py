@@ -223,7 +223,7 @@ def render_umap(
         font={"color": "#111827"},
     )
     fig.update_yaxes(scaleanchor="x", scaleratio=1)
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, width="stretch", theme=None)
 
 
 def render_violin(
@@ -258,7 +258,7 @@ def render_violin(
         plot_bgcolor="#ffffff",
         font={"color": "#111827"},
     )
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, width="stretch", theme=None)
 
 
 def build_group_expression_stats(df: pd.DataFrame, group_col: str, expr_col: str) -> pd.DataFrame:
@@ -316,7 +316,7 @@ def render_dotplot(
         plot_bgcolor="#ffffff",
         font={"color": "#111827"},
     )
-    st.plotly_chart(fig, width="stretch")
+    st.plotly_chart(fig, width="stretch", theme=None)
 
 
 def apply_global_styles() -> None:
