@@ -13,6 +13,8 @@ venv/
 
 # Streamlit
 .streamlit/
+!.streamlit/
+!.streamlit/config.toml
 
 # Environment and local data
 .env
