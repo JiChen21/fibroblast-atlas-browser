@@ -16,6 +16,7 @@ A lightweight, production-friendly Streamlit app for exploring a single-cell Ann
 
 - `H5AD_PATH` (default: `./data/FBs_adata.h5ad`)
 - `UMAP_MAX_POINTS` (default: `200000`)
+- `STRICT_DATA` (default: `false`; when `true`, app fails fast instead of using demo fallback)
 
 > Do **not** commit real `.h5ad` files to GitHub.
 
@@ -84,8 +85,8 @@ docker run --rm -p 8501:8501 \
 
 For ~739,910 cells, full interactive plotting can be slow depending on hardware.
 
-- `Auto` mode (default): plots all filtered points up to cap, otherwise random downsamples.
-- `Downsampled` mode: always uses random subset up to cap.
+- `Auto` mode (default): plots all filtered points up to cap, otherwise stratified downsamples.
+- `Downsampled` mode: always uses stratified subset up to cap.
 - `Full` mode: plots all filtered cells (best fidelity, slowest).
 
 Tradeoff:
