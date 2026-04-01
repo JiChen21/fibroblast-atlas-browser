@@ -21,6 +21,7 @@ A lightweight, production-friendly Streamlit app for exploring a single-cell Ann
 - `H5AD_PATH` (default: `./data/FBs_adata.h5ad`)
 - `UMAP_MAX_POINTS` (default: `200000`)
 - `STRICT_DATA` (default: `false`; when `true`, app fails fast instead of using demo fallback)
+- `LOG_LEVEL` (default: `INFO`)
 
 > Do **not** commit real `.h5ad` files to GitHub.
 
@@ -68,6 +69,13 @@ What it validates:
 - Required `obs` columns exist (condition/region/donor/dataset_name/cell_type/cell_type_V2/cell_type_V3/predicted_cell_type/leiden/leiden_default)
 
 This is a minimal smoke test to verify dataset compatibility before launching Streamlit.
+
+## Tests
+
+```bash
+pytest -q
+python -m py_compile app.py scripts/validate_h5ad.py core.py
+```
 
 ## Docker
 
