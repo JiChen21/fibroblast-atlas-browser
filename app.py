@@ -24,6 +24,20 @@ FILTER_COLUMNS = [
     "leiden_default",
 ]
 CORE_REQUIRED_OBS = ["cell_type", "condition"]
+CELL_TYPE_ORDER = [
+    "F1_Basal",
+    "F2_PSL",
+    "F3_Int",
+    "F4_Act",
+    "F5_ECM",
+    "F6_SLIT3+",
+    "F7_Inflam",
+    "F8_ITM2B+",
+    "F9_Mech",
+    "F10_CML",
+    "F11_ECL",
+]
+CONDITION_ORDER = ["CTRL", "HCM", "ACM", "AS", "AMI", "MI", "ICM", "DCM", "HF", "COVID19"]
 CELL_TYPE_COLOR_MAP = {
     "F1_Basal": "#8dd3c7",
     "F2_PSL": "#ffffb3",
@@ -311,6 +325,7 @@ def render_violin(
     title: str,
     color: Optional[str] = None,
     height: int = 420,
+    show_legend: bool = True,
 ) -> None:
     color_discrete_map = get_discrete_color_map(color) if color else None
     fig = px.violin(
@@ -319,11 +334,15 @@ def render_violin(
         y=y,
         color=color,
         color_discrete_map=color_discrete_map,
+        category_orders={
+            "cell_type": CELL_TYPE_ORDER,
+            "condition": CONDITION_ORDER,
+        },
         box=True,
         points=False,
         title=title,
     )
-    fig.update_layout(height=height)
+    fig.update_layout(height=height, showlegend=show_legend)
     st.plotly_chart(fig, width="stretch")
 
 
@@ -350,6 +369,7 @@ def render_dotplot(
     color: str,
     title: str,
     height: int = 380,
+    show_legend: bool = True,
 ) -> None:
     color_discrete_map = None
     color_continuous_scale = None
@@ -366,10 +386,14 @@ def render_dotplot(
         color=color,
         color_discrete_map=color_discrete_map,
         color_continuous_scale=color_continuous_scale,
+        category_orders={
+            "cell_type": CELL_TYPE_ORDER,
+            "condition": CONDITION_ORDER,
+        },
         title=title,
         hover_data={"mean_expression": ":.4f", "median_expression": ":.4f", "pct_expressing": ":.2f", "n_cells": True},
     )
-    fig.update_layout(height=height)
+    fig.update_layout(height=height, showlegend=show_legend)
     st.plotly_chart(fig, width="stretch")
 
 
@@ -550,7 +574,7 @@ def main() -> None:
                         expr_matrix, gene_idx, analysis_indices
                     )
 
-                    top_left, top_right = st.columns([1.25, 1.0])
+                    top_left, top_right = st.columns(2)
                     with top_left:
                         render_umap(
                             plot_df,
@@ -567,6 +591,7 @@ def main() -> None:
                             color="cell_type",
                             title=f"{gene_query} expression across cell types",
                             height=500,
+                            show_legend=False,
                         )
 
                     st.subheader(f"{gene_query} expression in different conditions")
@@ -583,6 +608,7 @@ def main() -> None:
                             color="condition",
                             title=f"{gene_query} condition dot plot (size=% expressing)",
                             height=360,
+                            show_legend=False,
                         )
                     with bottom_right:
                         render_violin(
@@ -592,6 +618,7 @@ def main() -> None:
                             color="condition",
                             title=f"{gene_query} condition violin plot",
                             height=360,
+                            show_legend=False,
                         )
             except ValueError as exc:
                 st.error(str(exc))
