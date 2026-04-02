@@ -630,8 +630,8 @@ def main() -> None:
             3. Use **Disease Compare** to compare subtype proportions and Ro/e enrichment across conditions.
             """
         )
-    elif module == "Metadata Explorer":
-        st.subheader("Metadata Explorer")
+    elif module == "Metadata Explore":
+        st.subheader("Metadata Explore")
         st.info(view_msg)
         if view_mode != "Full":
             st.caption(
