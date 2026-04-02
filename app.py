@@ -768,23 +768,26 @@ def main() -> None:
         totals = proportion_df.groupby("condition", observed=False)["n_observed"].transform("sum")
         proportion_df["proportion_pct"] = np.where(totals > 0, proportion_df["n_observed"] / totals * 100.0, 0.0)
 
-        st.markdown("#### Subtype composition (stacked proportions)")
-        render_condition_stacked_bar(
-            proportion_df,
-            condition_col="condition",
-            subtype_col="cell_type",
-            value_col="proportion_pct",
-            title="Cell subtype proportions by condition",
-        )
+        left_col, right_col = st.columns(2)
+        with left_col:
+            st.markdown("#### Subtype composition (stacked proportions)")
+            render_condition_stacked_bar(
+                proportion_df,
+                condition_col="condition",
+                subtype_col="cell_type",
+                value_col="proportion_pct",
+                title="Cell subtype proportions by condition",
+            )
 
         roe_df = compute_roe(counts, condition_col="condition", subtype_col="cell_type")
-        st.markdown("#### Ro/e heatmap (log2 scale)")
-        render_roe_heatmap(
-            roe_df,
-            condition_col="condition",
-            subtype_col="cell_type",
-            title="Fibroblast subtype enrichment (log2[Observed/Expected])",
-        )
+        with right_col:
+            st.markdown("#### Ro/e heatmap (log2 scale)")
+            render_roe_heatmap(
+                roe_df,
+                condition_col="condition",
+                subtype_col="cell_type",
+                title="Fibroblast subtype enrichment (log2[Observed/Expected])",
+            )
 
         st.caption(
             "Symbol rules: +++ / --- (|log2FC| ≥ 0.58), ++ / -- (≥ 0.32), + / - (≥ 0.10), +/- (near neutral)."
