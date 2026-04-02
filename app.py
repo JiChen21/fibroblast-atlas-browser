@@ -160,15 +160,6 @@ def get_filter_options(adata: ad.AnnData, columns: Tuple[str, ...]) -> Dict[str,
     return out
 
 
-def get_expression_source_options(adata: ad.AnnData) -> List[str]:
-    opts = ["X"]
-    if adata.raw is not None:
-        opts.append("raw")
-    if adata.layers.keys():
-        opts.extend([f"layer:{name}" for name in adata.layers.keys()])
-    return opts
-
-
 def get_expression_source(adata: ad.AnnData, source_key: str) -> Tuple[object, pd.Index, pd.DataFrame]:
     if source_key == "X":
         return adata.X, adata.var_names, adata.var
@@ -556,7 +547,12 @@ def main() -> None:
 
             if module == "Gene Query Module":
                 st.subheader("Gene query")
-                expression_source = st.selectbox("Expression source", options=get_expression_source_options(adata))
+                expression_source = "X"
+                st.text_input(
+                    "Expression source",
+                    value="Normalized count (X)",
+                    disabled=True,
+                )
                 gene_query = st.text_input(
                     "Gene search box",
                     value="",
