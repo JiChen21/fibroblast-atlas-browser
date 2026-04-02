@@ -7,7 +7,7 @@ A lightweight, production-friendly Streamlit app for exploring a single-cell Ann
 - Precomputed UMAP visualization from `adata.obsm["X_umap"]`.
 - UMAP coloring by metadata (`adata.obs`).
 - On-demand single-gene expression overlay.
-- Structured interface with dedicated Home / Metadata Explorer / Gene Query / Data Dictionary modules.
+- Structured interface with dedicated Atlas Overview / Metadata Explore / Gene Query / Disease–subtype compare modules.
 - Contextual sidebar controls are shown only in analysis modules (hidden on Home).
 - Gene Query module uses a compact two-row layout to reduce scrolling.
 - Gene Query charts enforce fixed display orders for `cell_type` and `condition`.
@@ -67,7 +67,13 @@ What it validates:
 
 - H5AD file exists and can be loaded
 - `adata.obsm["X_umap"]` exists
-- Required `obs` columns exist (condition/region/donor/dataset_name/cell_type/cell_type_V2/cell_type_V3/predicted_cell_type/leiden/leiden_default)
+- Required `obs` columns exist by default (`condition`, `region`, `cell_type`)
+
+You can override required metadata fields via `--require-obs`, for example:
+
+```bash
+python scripts/validate_h5ad.py --path "$H5AD_PATH" --require-obs condition cell_type
+```
 
 This is a minimal smoke test to verify dataset compatibility before launching Streamlit.
 
