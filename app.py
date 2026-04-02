@@ -8,7 +8,15 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 from scipy import sparse
-from core import apply_filters, choose_plot_indices, resolve_gene_index, validate_core_metadata
+from core import (
+    apply_filters,
+    build_condition_subtype_counts,
+    choose_plot_indices,
+    compute_roe,
+    resolve_gene_index,
+    roe_symbol,
+    validate_core_metadata,
+)
 
 DEFAULT_H5AD_PATH = "./data/FBs_adata.h5ad"
 DEFAULT_MAX_POINTS = int(os.getenv("UMAP_MAX_POINTS", "200000"))
@@ -150,15 +158,6 @@ def get_filter_options(adata: ad.AnnData, columns: Tuple[str, ...]) -> Dict[str,
         if col in adata.obs.columns:
             out[col] = sorted(adata.obs[col].astype(str).dropna().unique().tolist())
     return out
-
-
-def get_expression_source_options(adata: ad.AnnData) -> List[str]:
-    opts = ["X"]
-    if adata.raw is not None:
-        opts.append("raw")
-    if adata.layers.keys():
-        opts.extend([f"layer:{name}" for name in adata.layers.keys()])
-    return opts
 
 
 def get_expression_source(adata: ad.AnnData, source_key: str) -> Tuple[object, pd.Index, pd.DataFrame]:
@@ -319,6 +318,95 @@ def render_dotplot(
     st.plotly_chart(fig, width="stretch", theme=None)
 
 
+def render_condition_stacked_bar(
+    df: pd.DataFrame,
+    condition_col: str,
+    subtype_col: str,
+    value_col: str,
+    title: str,
+    height: int = 430,
+) -> None:
+    fig = px.bar(
+        df,
+        x=condition_col,
+        y=value_col,
+        color=subtype_col,
+        barmode="stack",
+        category_orders={"condition": CONDITION_ORDER, "cell_type": CELL_TYPE_ORDER},
+        color_discrete_map=CELL_TYPE_COLOR_MAP if subtype_col == "cell_type" else None,
+        title=title,
+        hover_data={value_col: ":.2f", "n_observed": True},
+    )
+    fig.update_yaxes(title="Proportion (%)")
+    fig.update_layout(
+        height=height,
+        template="plotly_white",
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#ffffff",
+        font={"color": "#111827"},
+    )
+    st.plotly_chart(fig, width="stretch", theme=None)
+
+
+def render_roe_heatmap(
+    roe_df: pd.DataFrame,
+    condition_col: str,
+    subtype_col: str,
+    title: str,
+    condition_order: Optional[List[str]] = None,
+    subtype_order: Optional[List[str]] = None,
+    clip_val: float = 3.0,
+    height: int = 560,
+) -> None:
+    heatmap_df = roe_df.pivot(index=subtype_col, columns=condition_col, values="Ro_e")
+    if subtype_order:
+        row_order = [v for v in subtype_order if v in heatmap_df.index]
+        row_order.extend([v for v in heatmap_df.index.tolist() if v not in row_order])
+        heatmap_df = heatmap_df.reindex(index=row_order)
+    if condition_order:
+        col_order = [v for v in condition_order if v in heatmap_df.columns]
+        col_order.extend([v for v in heatmap_df.columns.tolist() if v not in col_order])
+        heatmap_df = heatmap_df.reindex(columns=col_order)
+
+    roe_matrix = heatmap_df.to_numpy(dtype=float)
+    log2_mat = np.log2(roe_matrix)
+
+    finite_vals = log2_mat[np.isfinite(log2_mat)]
+    max_abs = float(np.max(np.abs(finite_vals))) if finite_vals.size > 0 else clip_val
+    if (not np.isfinite(max_abs)) or max_abs <= 0:
+        max_abs = clip_val
+
+    log2_mat[np.isinf(log2_mat) & (roe_matrix == 0)] = -max_abs
+    plot_mat = np.clip(log2_mat, -clip_val, clip_val)
+    text_mat = np.vectorize(roe_symbol)(roe_matrix)
+
+    fig = px.imshow(
+        plot_mat,
+        x=heatmap_df.columns.tolist(),
+        y=heatmap_df.index.tolist(),
+        color_continuous_scale=[(0.0, "#2166AC"), (0.5, "white"), (1.0, "#B2182B")],
+        zmin=-clip_val,
+        zmax=clip_val,
+        labels={"color": "log2(Ro/e)", "x": condition_col, "y": subtype_col},
+        title=title,
+        aspect="auto",
+    )
+    fig.update_traces(text=text_mat, texttemplate="%{text}", textfont={"size": 11, "color": "black"})
+    fig.update_layout(
+        height=height,
+        template="plotly_white",
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#ffffff",
+        font={"color": "#111827"},
+        coloraxis_colorbar={
+            "tickmode": "array",
+            "tickvals": [-3, -2, -1, 0, 1, 2, 3],
+            "ticktext": ["≤-3", "-2", "-1", "0", "1", "2", "≥3"],
+        },
+    )
+    st.plotly_chart(fig, width="stretch", theme=None)
+
+
 def apply_global_styles() -> None:
     st.markdown(
         """
@@ -410,7 +498,7 @@ def main() -> None:
     filter_options = get_filter_options(adata, tuple(FILTER_COLUMNS))
     module = st.radio(
         "Navigation",
-        ["Home", "Metadata Explorer", "Gene Query Module", "Data Dictionary"],
+        ["Home", "Metadata Explorer", "Gene Query Module", "Condition / Disease Browser"],
         horizontal=True,
         label_visibility="collapsed",
     )
@@ -422,7 +510,9 @@ def main() -> None:
     expression_source = "X"
     gene_query = ""
 
-    if module in {"Metadata Explorer", "Gene Query Module"}:
+    selected_conditions_for_browser: List[str] = []
+
+    if module in {"Metadata Explorer", "Gene Query Module", "Condition / Disease Browser"}:
         with st.sidebar:
             st.header(f"{module} controls")
             color_by = st.selectbox(
@@ -457,13 +547,24 @@ def main() -> None:
 
             if module == "Gene Query Module":
                 st.subheader("Gene query")
-                expression_source = st.selectbox("Expression source", options=get_expression_source_options(adata))
+                expression_source = "X"
                 gene_query = st.text_input(
                     "Gene search box",
                     value="",
                     placeholder="e.g., COL1A1",
                     help="Gene names are resolved directly from adata.var_names.",
                 ).strip()
+
+            if module == "Condition / Disease Browser":
+                condition_options_raw = filter_options.get("condition", [])
+                condition_options = [c for c in CONDITION_ORDER if c in condition_options_raw]
+                condition_options.extend([c for c in condition_options_raw if c not in condition_options])
+                selected_conditions_for_browser = st.multiselect(
+                    "Choose conditions",
+                    options=condition_options,
+                    default=condition_options,
+                    help="Select one or multiple conditions to compare subtype composition and enrichment.",
+                )
 
     filter_mask = apply_filters(adata.obs, selected_filters)
     filtered_indices = np.flatnonzero(filter_mask)
@@ -524,7 +625,7 @@ def main() -> None:
             """
             1. Use **Metadata Explorer** to inspect UMAP distributions and subset cells with sidebar filters.  
             2. Use **Gene Query Module** to visualize gene expression on UMAP and compare cell_type/condition-level patterns.  
-            3. Use **Data Dictionary** to inspect available metadata columns and dtypes.
+            3. Use **Condition / Disease Browser** to compare subtype proportions and Ro/e enrichment across conditions.
             """
         )
     elif module == "Metadata Explorer":
@@ -634,15 +735,67 @@ def main() -> None:
         else:
             st.info("Select a gene in the sidebar to display expression on UMAP.")
 
-    elif module == "Data Dictionary":
-        st.subheader("Data dictionary (obs)")
-        data_dict = pd.DataFrame(
-            {
-                "column": adata.obs.columns.astype(str),
-                "dtype": [str(dtype) for dtype in adata.obs.dtypes],
-            }
+    elif module == "Condition / Disease Browser":
+        st.subheader("Condition / Disease Browser")
+        st.caption("Compare subtype proportions across selected conditions and inspect log2(Observed/Expected) enrichment.")
+
+        if "condition" not in adata.obs.columns or "cell_type" not in adata.obs.columns:
+            st.error("This module requires both 'condition' and 'cell_type' columns in adata.obs.")
+            st.stop()
+
+        analysis_obs = adata.obs.iloc[filtered_indices][["condition", "cell_type"]].copy()
+        analysis_obs["condition"] = analysis_obs["condition"].astype(str)
+        analysis_obs["cell_type"] = analysis_obs["cell_type"].astype(str)
+
+        if analysis_obs.empty:
+            st.warning("No cells matched the current filters. Please adjust filters in the sidebar.")
+            st.stop()
+
+        selected_conditions = selected_conditions_for_browser or sorted(analysis_obs["condition"].unique().tolist())
+
+        counts = build_condition_subtype_counts(
+            analysis_obs,
+            condition_col="condition",
+            subtype_col="cell_type",
+            selected_conditions=selected_conditions,
+            condition_order=CONDITION_ORDER,
+            subtype_order=CELL_TYPE_ORDER,
         )
-        st.dataframe(data_dict, width="stretch")
+        if counts.empty:
+            st.warning("No data available for the selected conditions under current filters.")
+            st.stop()
+
+        proportion_df = counts.copy()
+        totals = proportion_df.groupby("condition", observed=False)["n_observed"].transform("sum")
+        proportion_df["proportion_pct"] = np.where(totals > 0, proportion_df["n_observed"] / totals * 100.0, 0.0)
+
+        left_col, right_col = st.columns(2)
+        with left_col:
+            st.markdown("#### Subtype composition (stacked proportions)")
+            render_condition_stacked_bar(
+                proportion_df,
+                condition_col="condition",
+                subtype_col="cell_type",
+                value_col="proportion_pct",
+                title="Cell subtype proportions by condition",
+            )
+
+        roe_df = compute_roe(counts, condition_col="condition", subtype_col="cell_type")
+        with right_col:
+            st.markdown("#### Ro/e heatmap (log2 scale)")
+            render_roe_heatmap(
+                roe_df,
+                condition_col="condition",
+                subtype_col="cell_type",
+                title="Fibroblast subtype enrichment (log2[Observed/Expected])",
+                condition_order=CONDITION_ORDER,
+                subtype_order=CELL_TYPE_ORDER,
+            )
+
+        st.caption(
+            "Symbol rules: +++ / --- (|log2FC| ≥ 0.58), ++ / -- (≥ 0.32), + / - (≥ 0.10), +/- (near neutral). "
+            "Heatmap color scale is clipped to [-3, 3] on log2(Ro/e)."
+        )
 
 
 if __name__ == "__main__":

@@ -71,6 +71,22 @@ What it validates:
 
 This is a minimal smoke test to verify dataset compatibility before launching Streamlit.
 
+## Slim large `.h5ad` for this browser
+
+If your source AnnData contains analysis artifacts not needed by this app, create a browser-focused slim file:
+
+```bash
+python scripts/slim_h5ad_for_browser.py \
+  --input ./data/FBs_adata.h5ad \
+  --output ./data/FBs_adata.slim.h5ad \
+  --keep-obs condition region cell_type
+```
+
+Default keep/drop behavior:
+
+- Keep: `X` (cast to float32), `obs` (`condition`, `region`, `cell_type`), `var_names`, `obsm["X_umap"]`
+- Drop: `raw`, `layers`, `uns`, `obsp`, `varm`, extra `obsm` keys
+
 ## Tests
 
 ```bash
@@ -128,11 +144,7 @@ The app always avoids densifying the entire expression matrix and computes expre
 
 ## Expression source compatibility
 
-Gene query supports expression from:
-
-- `X`
-- `raw` (if available)
-- `layer:<name>` (if available)
+Gene query uses normalized expression from `X` only.
 
 Gene lookup uses `adata.var_names`.
 

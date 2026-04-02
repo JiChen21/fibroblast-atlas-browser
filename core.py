@@ -117,3 +117,88 @@ def resolve_gene_index(
     if len(matches) == 0:
         return None
     return int(matches[0])
+
+
+def build_condition_subtype_counts(
+    obs: pd.DataFrame,
+    condition_col: str,
+    subtype_col: str,
+    selected_conditions: Optional[List[str]] = None,
+    condition_order: Optional[List[str]] = None,
+    subtype_order: Optional[List[str]] = None,
+) -> pd.DataFrame:
+    data = obs[[condition_col, subtype_col]].copy()
+    data[condition_col] = data[condition_col].astype(str)
+    data[subtype_col] = data[subtype_col].astype(str)
+
+    if selected_conditions:
+        allowed = set(selected_conditions)
+        data = data[data[condition_col].isin(allowed)]
+
+    if condition_order:
+        ordered_conditions = [c for c in condition_order if c in set(data[condition_col])]
+        ordered_conditions.extend([c for c in sorted(data[condition_col].unique()) if c not in ordered_conditions])
+    else:
+        ordered_conditions = sorted(data[condition_col].unique().tolist())
+
+    if subtype_order:
+        ordered_subtypes = [s for s in subtype_order if s in set(data[subtype_col])]
+        ordered_subtypes.extend([s for s in sorted(data[subtype_col].unique()) if s not in ordered_subtypes])
+    else:
+        ordered_subtypes = sorted(data[subtype_col].unique().tolist())
+
+    combinations = pd.MultiIndex.from_product(
+        [ordered_conditions, ordered_subtypes], names=[condition_col, subtype_col]
+    ).to_frame(index=False)
+
+    counts = (
+        data.groupby([condition_col, subtype_col], observed=False)
+        .size()
+        .reset_index(name="n_observed")
+    )
+
+    out = combinations.merge(counts, on=[condition_col, subtype_col], how="left")
+    out["n_observed"] = out["n_observed"].fillna(0).astype(int)
+    return out
+
+
+def compute_roe(
+    counts: pd.DataFrame,
+    condition_col: str,
+    subtype_col: str,
+    pseudocount: float = 0.5,
+) -> pd.DataFrame:
+    totals = counts.groupby(condition_col, observed=False)["n_observed"].sum().rename("total").reset_index()
+    subtype_totals = counts.groupby(subtype_col, observed=False)["n_observed"].sum().rename("n_total_subtype").reset_index()
+    total_all = float(subtype_totals["n_total_subtype"].sum())
+
+    if total_all <= 0:
+        subtype_totals["overall_proportion"] = np.nan
+    else:
+        subtype_totals["overall_proportion"] = subtype_totals["n_total_subtype"] / total_all
+
+    out = (
+        counts.merge(subtype_totals[[subtype_col, "overall_proportion"]], on=subtype_col, how="left")
+        .merge(totals, on=condition_col, how="left")
+    )
+    out["n_expected"] = out["total"] * out["overall_proportion"]
+    out["Ro_e"] = (out["n_observed"] + pseudocount) / (out["n_expected"] + pseudocount)
+    out.loc[~np.isfinite(out["Ro_e"]), "Ro_e"] = np.nan
+    return out
+
+
+def roe_symbol(value: float) -> str:
+    if pd.isna(value) or not np.isfinite(value):
+        return ""
+    if value == 0:
+        return "---"
+
+    lfc = np.log2(value)
+    abs_lfc = abs(lfc)
+    if abs_lfc >= 0.58:
+        return "+++" if lfc > 0 else "---"
+    if abs_lfc >= 0.32:
+        return "++" if lfc > 0 else "--"
+    if abs_lfc >= 0.10:
+        return "+" if lfc > 0 else "-"
+    return "+/-"
