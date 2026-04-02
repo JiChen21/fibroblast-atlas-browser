@@ -496,12 +496,23 @@ def main() -> None:
     obs_cols = adata.obs.columns.astype(str).tolist()
     color_candidates = obs_cols if obs_cols else ["None"]
     filter_options = get_filter_options(adata, tuple(FILTER_COLUMNS))
-    module = st.radio(
-        "Navigation",
-        ["Atlas Overview", "Metadata Explore", "Gene Query", "Disease–subtype compare"],
-        horizontal=True,
-        label_visibility="collapsed",
-    )
+    module_options = ["Atlas Overview", "Metadata Explore", "Gene Query", "Disease–Subtype Compare"]
+    nav_container = st.container()
+    with nav_container:
+        if hasattr(st, "segmented_control"):
+            module = st.segmented_control(
+                "Navigation",
+                options=module_options,
+                selection_mode="single",
+                default="Atlas Overview",
+            )
+        else:
+            module = st.radio(
+                "Navigation",
+                module_options,
+                horizontal=True,
+                label_visibility="collapsed",
+            )
 
     color_by = "cell_type" if "cell_type" in color_candidates else color_candidates[0]
     selected_filters: Dict[str, List[str]] = {}
@@ -512,7 +523,7 @@ def main() -> None:
 
     selected_conditions_for_browser: List[str] = []
 
-    if module in {"Metadata Explore", "Gene Query", "Disease–subtype compare"}:
+    if module in {"Metadata Explore", "Gene Query", "Disease–Subtype Compare"}:
         with st.sidebar:
             st.header(f"{module} controls")
             color_by = st.selectbox(
@@ -555,7 +566,7 @@ def main() -> None:
                     help="Gene names are resolved directly from adata.var_names.",
                 ).strip()
 
-            if module == "Disease–subtype compare":
+            if module == "Disease–Subtype Compare":
                 condition_options_raw = filter_options.get("condition", [])
                 condition_options = [c for c in CONDITION_ORDER if c in condition_options_raw]
                 condition_options.extend([c for c in condition_options_raw if c not in condition_options])
@@ -626,7 +637,7 @@ def main() -> None:
             """
             1. Use **Metadata Explore** to inspect UMAP distributions and subset cells with sidebar filters.  
             2. Use **Gene Query** to visualize gene expression on UMAP and compare cell_type/condition-level patterns.  
-            3. Use **Disease–subtype compare** to compare subtype proportions and Ro/e enrichment across conditions.
+            3. Use **Disease–Subtype Compare** to compare subtype proportions and Ro/e enrichment across conditions.
             """
         )
     elif module == "Metadata Explore":
@@ -736,8 +747,8 @@ def main() -> None:
         else:
             st.info("Select a gene in the sidebar to display expression on UMAP.")
 
-    elif module == "Disease–subtype compare":
-        st.subheader("Disease–subtype compare")
+    elif module == "Disease–Subtype Compare":
+        st.subheader("Disease–Subtype Compare")
         st.caption("Compare subtype proportions across selected conditions and inspect log2(Observed/Expected) enrichment.")
 
         if "condition" not in adata.obs.columns or "cell_type" not in adata.obs.columns:
@@ -797,69 +808,6 @@ def main() -> None:
             "Symbol rules: +++ / --- (|log2FC| ≥ 0.58), ++ / -- (≥ 0.32), + / - (≥ 0.10), +/- (near neutral). "
             "Heatmap color scale is clipped to [-3, 3] on log2(Ro/e)."
         )
-
-    elif module == "Disease–subtype compare":
-        st.subheader("Disease–subtype compare")
-        st.caption("Compare subtype proportions across selected conditions and inspect log2(Observed/Expected) enrichment.")
-
-        if "condition" not in adata.obs.columns or "cell_type" not in adata.obs.columns:
-            st.error("This module requires both 'condition' and 'cell_type' columns in adata.obs.")
-            st.stop()
-
-        analysis_obs = adata.obs.iloc[filtered_indices][["condition", "cell_type"]].copy()
-        analysis_obs["condition"] = analysis_obs["condition"].astype(str)
-        analysis_obs["cell_type"] = analysis_obs["cell_type"].astype(str)
-
-        if analysis_obs.empty:
-            st.warning("No cells matched the current filters. Please adjust filters in the sidebar.")
-            st.stop()
-
-        selected_conditions = selected_conditions_for_browser or sorted(analysis_obs["condition"].unique().tolist())
-
-        counts = build_condition_subtype_counts(
-            analysis_obs,
-            condition_col="condition",
-            subtype_col="cell_type",
-            selected_conditions=selected_conditions,
-            condition_order=CONDITION_ORDER,
-            subtype_order=CELL_TYPE_ORDER,
-        )
-        if counts.empty:
-            st.warning("No data available for the selected conditions under current filters.")
-            st.stop()
-
-        proportion_df = counts.copy()
-        totals = proportion_df.groupby("condition", observed=False)["n_observed"].transform("sum")
-        proportion_df["proportion_pct"] = np.where(totals > 0, proportion_df["n_observed"] / totals * 100.0, 0.0)
-
-        left_col, right_col = st.columns(2)
-        with left_col:
-            st.markdown("#### Subtype composition (stacked proportions)")
-            render_condition_stacked_bar(
-                proportion_df,
-                condition_col="condition",
-                subtype_col="cell_type",
-                value_col="proportion_pct",
-                title="Cell subtype proportions by condition",
-            )
-
-        roe_df = compute_roe(counts, condition_col="condition", subtype_col="cell_type")
-        with right_col:
-            st.markdown("#### Ro/e heatmap (log2 scale)")
-            render_roe_heatmap(
-                roe_df,
-                condition_col="condition",
-                subtype_col="cell_type",
-                title="Fibroblast subtype enrichment (log2[Observed/Expected])",
-                condition_order=CONDITION_ORDER,
-                subtype_order=CELL_TYPE_ORDER,
-            )
-
-        st.caption(
-            "Symbol rules: +++ / --- (|log2FC| ≥ 0.58), ++ / -- (≥ 0.32), + / - (≥ 0.10), +/- (near neutral). "
-            "Heatmap color scale is clipped to [-3, 3] on log2(Ro/e)."
-        )
-
 
 if __name__ == "__main__":
     main()
