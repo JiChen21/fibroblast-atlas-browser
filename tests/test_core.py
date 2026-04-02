@@ -81,7 +81,7 @@ def test_compute_roe_returns_expected_values():
     )
     roe = compute_roe(counts, condition_col="condition", subtype_col="cell_type")
     val = roe[(roe["condition"] == "A") & (roe["cell_type"] == "Y")]["Ro_e"].iloc[0]
-    assert val == 0
+    assert 0 < val < 1
 
 
 def test_roe_symbol_thresholds():

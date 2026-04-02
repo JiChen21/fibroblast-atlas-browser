@@ -162,7 +162,12 @@ def build_condition_subtype_counts(
     return out
 
 
-def compute_roe(counts: pd.DataFrame, condition_col: str, subtype_col: str) -> pd.DataFrame:
+def compute_roe(
+    counts: pd.DataFrame,
+    condition_col: str,
+    subtype_col: str,
+    pseudocount: float = 0.5,
+) -> pd.DataFrame:
     totals = counts.groupby(condition_col, observed=False)["n_observed"].sum().rename("total").reset_index()
     subtype_totals = counts.groupby(subtype_col, observed=False)["n_observed"].sum().rename("n_total_subtype").reset_index()
     total_all = float(subtype_totals["n_total_subtype"].sum())
@@ -177,7 +182,7 @@ def compute_roe(counts: pd.DataFrame, condition_col: str, subtype_col: str) -> p
         .merge(totals, on=condition_col, how="left")
     )
     out["n_expected"] = out["total"] * out["overall_proportion"]
-    out["Ro_e"] = out["n_observed"] / out["n_expected"]
+    out["Ro_e"] = (out["n_observed"] + pseudocount) / (out["n_expected"] + pseudocount)
     out.loc[~np.isfinite(out["Ro_e"]), "Ro_e"] = np.nan
     return out
 

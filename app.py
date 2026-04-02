@@ -364,6 +364,7 @@ def render_roe_heatmap(
     title: str,
     condition_order: Optional[List[str]] = None,
     subtype_order: Optional[List[str]] = None,
+    clip_val: float = 3.0,
     height: int = 560,
 ) -> None:
     heatmap_df = roe_df.pivot(index=subtype_col, columns=condition_col, values="Ro_e")
@@ -380,20 +381,21 @@ def render_roe_heatmap(
     log2_mat = np.log2(roe_matrix)
 
     finite_vals = log2_mat[np.isfinite(log2_mat)]
-    max_abs = float(np.max(np.abs(finite_vals))) if finite_vals.size > 0 else 1.0
+    max_abs = float(np.max(np.abs(finite_vals))) if finite_vals.size > 0 else clip_val
     if (not np.isfinite(max_abs)) or max_abs <= 0:
-        max_abs = 1.0
+        max_abs = clip_val
 
     log2_mat[np.isinf(log2_mat) & (roe_matrix == 0)] = -max_abs
+    plot_mat = np.clip(log2_mat, -clip_val, clip_val)
     text_mat = np.vectorize(roe_symbol)(roe_matrix)
 
     fig = px.imshow(
-        log2_mat,
+        plot_mat,
         x=heatmap_df.columns.tolist(),
         y=heatmap_df.index.tolist(),
         color_continuous_scale=[(0.0, "#2166AC"), (0.5, "white"), (1.0, "#B2182B")],
-        zmin=-max_abs,
-        zmax=max_abs,
+        zmin=-clip_val,
+        zmax=clip_val,
         labels={"color": "log2(Ro/e)", "x": condition_col, "y": subtype_col},
         title=title,
         aspect="auto",
@@ -405,6 +407,11 @@ def render_roe_heatmap(
         paper_bgcolor="#ffffff",
         plot_bgcolor="#ffffff",
         font={"color": "#111827"},
+        coloraxis_colorbar={
+            "tickmode": "array",
+            "tickvals": [-3, -2, -1, 0, 1, 2, 3],
+            "ticktext": ["≤-3", "-2", "-1", "0", "1", "2", "≥3"],
+        },
     )
     st.plotly_chart(fig, width="stretch", theme=None)
 
@@ -805,7 +812,8 @@ def main() -> None:
             )
 
         st.caption(
-            "Symbol rules: +++ / --- (|log2FC| ≥ 0.58), ++ / -- (≥ 0.32), + / - (≥ 0.10), +/- (near neutral)."
+            "Symbol rules: +++ / --- (|log2FC| ≥ 0.58), ++ / -- (≥ 0.32), + / - (≥ 0.10), +/- (near neutral). "
+            "Heatmap color scale is clipped to [-3, 3] on log2(Ro/e)."
         )
 
 
