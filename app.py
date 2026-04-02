@@ -496,23 +496,13 @@ def main() -> None:
     obs_cols = adata.obs.columns.astype(str).tolist()
     color_candidates = obs_cols if obs_cols else ["None"]
     filter_options = get_filter_options(adata, tuple(FILTER_COLUMNS))
-    module_options = ["Atlas Overview", "Metadata Explore", "Gene Query", "Disease–Subtype Compare"]
-    nav_container = st.container()
-    with nav_container:
-        if hasattr(st, "segmented_control"):
-            module = st.segmented_control(
-                "Navigation",
-                options=module_options,
-                selection_mode="single",
-                default="Atlas Overview",
-            )
-        else:
-            module = st.radio(
-                "Navigation",
-                module_options,
-                horizontal=True,
-                label_visibility="collapsed",
-            )
+    module_options = ["Atlas Overview", "Metadata Explorer", "Gene Query", "Disease Compare"]
+    module = st.radio(
+        "Navigation",
+        module_options,
+        horizontal=True,
+        label_visibility="collapsed",
+    )
 
     color_by = "cell_type" if "cell_type" in color_candidates else color_candidates[0]
     selected_filters: Dict[str, List[str]] = {}
@@ -523,7 +513,7 @@ def main() -> None:
 
     selected_conditions_for_browser: List[str] = []
 
-    if module in {"Metadata Explore", "Gene Query", "Disease–Subtype Compare"}:
+    if module in {"Metadata Explorer", "Gene Query", "Disease Compare"}:
         with st.sidebar:
             st.header(f"{module} controls")
             color_by = st.selectbox(
@@ -566,7 +556,7 @@ def main() -> None:
                     help="Gene names are resolved directly from adata.var_names.",
                 ).strip()
 
-            if module == "Disease–Subtype Compare":
+            if module == "Disease Compare":
                 condition_options_raw = filter_options.get("condition", [])
                 condition_options = [c for c in CONDITION_ORDER if c in condition_options_raw]
                 condition_options.extend([c for c in condition_options_raw if c not in condition_options])
@@ -635,9 +625,9 @@ def main() -> None:
         st.subheader("How to use this portal")
         st.markdown(
             """
-            1. Use **Metadata Explore** to inspect UMAP distributions and subset cells with sidebar filters.  
+            1. Use **Metadata Explorer** to inspect UMAP distributions and subset cells with sidebar filters.  
             2. Use **Gene Query** to visualize gene expression on UMAP and compare cell_type/condition-level patterns.  
-            3. Use **Disease–Subtype Compare** to compare subtype proportions and Ro/e enrichment across conditions.
+            3. Use **Disease Compare** to compare subtype proportions and Ro/e enrichment across conditions.
             """
         )
     elif module == "Metadata Explore":
@@ -747,8 +737,8 @@ def main() -> None:
         else:
             st.info("Select a gene in the sidebar to display expression on UMAP.")
 
-    elif module == "Disease–Subtype Compare":
-        st.subheader("Disease–Subtype Compare")
+    elif module == "Disease Compare":
+        st.subheader("Disease Compare")
         st.caption("Compare subtype proportions across selected conditions and inspect log2(Observed/Expected) enrichment.")
 
         if "condition" not in adata.obs.columns or "cell_type" not in adata.obs.columns:

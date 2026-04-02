@@ -7,7 +7,7 @@ A lightweight, production-friendly Streamlit app for exploring a single-cell Ann
 - Precomputed UMAP visualization from `adata.obsm["X_umap"]`.
 - UMAP coloring by metadata (`adata.obs`).
 - On-demand single-gene expression overlay.
-- Structured interface with dedicated Atlas Overview / Metadata Explore / Gene Query / Disease–Subtype Compare modules.
+- Structured interface with dedicated Atlas Overview / Metadata Explorer / Gene Query / Disease Compare modules.
 - Contextual sidebar controls are shown only in analysis modules (hidden on Home).
 - Gene Query module uses a compact two-row layout to reduce scrolling.
 - Gene Query charts enforce fixed display orders for `cell_type` and `condition`.
