@@ -362,9 +362,20 @@ def render_roe_heatmap(
     condition_col: str,
     subtype_col: str,
     title: str,
+    condition_order: Optional[List[str]] = None,
+    subtype_order: Optional[List[str]] = None,
     height: int = 560,
 ) -> None:
     heatmap_df = roe_df.pivot(index=subtype_col, columns=condition_col, values="Ro_e")
+    if subtype_order:
+        row_order = [v for v in subtype_order if v in heatmap_df.index]
+        row_order.extend([v for v in heatmap_df.index.tolist() if v not in row_order])
+        heatmap_df = heatmap_df.reindex(index=row_order)
+    if condition_order:
+        col_order = [v for v in condition_order if v in heatmap_df.columns]
+        col_order.extend([v for v in heatmap_df.columns.tolist() if v not in col_order])
+        heatmap_df = heatmap_df.reindex(columns=col_order)
+
     roe_matrix = heatmap_df.to_numpy(dtype=float)
     log2_mat = np.log2(roe_matrix)
 
@@ -547,7 +558,9 @@ def main() -> None:
                 ).strip()
 
             if module == "Condition / Disease Browser":
-                condition_options = filter_options.get("condition", [])
+                condition_options_raw = filter_options.get("condition", [])
+                condition_options = [c for c in CONDITION_ORDER if c in condition_options_raw]
+                condition_options.extend([c for c in condition_options_raw if c not in condition_options])
                 selected_conditions_for_browser = st.multiselect(
                     "Choose conditions",
                     options=condition_options,
@@ -787,6 +800,8 @@ def main() -> None:
                 condition_col="condition",
                 subtype_col="cell_type",
                 title="Fibroblast subtype enrichment (log2[Observed/Expected])",
+                condition_order=CONDITION_ORDER,
+                subtype_order=CELL_TYPE_ORDER,
             )
 
         st.caption(
