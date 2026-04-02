@@ -10,14 +10,7 @@ import anndata as ad
 DEFAULT_REQUIRED_OBS = [
     "condition",
     "region",
-    "donor",
-    "dataset_name",
     "cell_type",
-    "cell_type_V2",
-    "cell_type_V3",
-    "predicted_cell_type",
-    "leiden",
-    "leiden_default",
 ]
 
 

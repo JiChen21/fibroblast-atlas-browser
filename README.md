@@ -67,7 +67,13 @@ What it validates:
 
 - H5AD file exists and can be loaded
 - `adata.obsm["X_umap"]` exists
-- Required `obs` columns exist (condition/region/donor/dataset_name/cell_type/cell_type_V2/cell_type_V3/predicted_cell_type/leiden/leiden_default)
+- Required `obs` columns exist by default (`condition`, `region`, `cell_type`)
+
+You can override required metadata fields via `--require-obs`, for example:
+
+```bash
+python scripts/validate_h5ad.py --path "$H5AD_PATH" --require-obs condition cell_type
+```
 
 This is a minimal smoke test to verify dataset compatibility before launching Streamlit.
 
