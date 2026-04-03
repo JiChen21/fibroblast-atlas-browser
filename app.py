@@ -326,6 +326,8 @@ def render_condition_stacked_bar(
     title: str,
     height: int = 430,
 ) -> None:
+    n_conditions = int(df[condition_col].astype(str).nunique()) if not df.empty else 1
+    fig_width = max(620, 140 + n_conditions * 78 + 240)
     fig = px.bar(
         df,
         x=condition_col,
@@ -340,12 +342,13 @@ def render_condition_stacked_bar(
     fig.update_yaxes(title="Proportion (%)")
     fig.update_layout(
         height=height,
+        width=fig_width,
         template="plotly_white",
         paper_bgcolor="#ffffff",
         plot_bgcolor="#ffffff",
         font={"color": "#111827"},
     )
-    st.plotly_chart(fig, width="stretch", theme=None)
+    st.plotly_chart(fig, width="content", theme=None)
 
 
 def render_roe_heatmap(
@@ -392,8 +395,11 @@ def render_roe_heatmap(
         aspect="auto",
     )
     fig.update_traces(text=text_mat, texttemplate="%{text}", textfont={"size": 11, "color": "black"})
+    n_conditions = max(1, len(heatmap_df.columns))
+    fig_width = max(620, 160 + n_conditions * 78)
     fig.update_layout(
         height=height,
+        width=fig_width,
         template="plotly_white",
         paper_bgcolor="#ffffff",
         plot_bgcolor="#ffffff",
@@ -404,7 +410,7 @@ def render_roe_heatmap(
             "ticktext": ["≤-3", "-2", "-1", "0", "1", "2", "≥3"],
         },
     )
-    st.plotly_chart(fig, width="stretch", theme=None)
+    st.plotly_chart(fig, width="content", theme=None)
 
 
 def apply_global_styles() -> None:
@@ -453,6 +459,17 @@ def apply_global_styles() -> None:
             border: 1px solid #d1d5db !important;
         }
         .stRadio > div[role="radiogroup"] label {
+            color: #111827 !important;
+        }
+        /* Keep loading placeholder readable under custom theme overrides */
+        [data-testid="stSpinner"] {
+            background-color: #ffffff !important;
+            color: #111827 !important;
+            border: 1px solid #e5e7eb !important;
+            border-radius: 0.5rem;
+            padding: 0.35rem 0.5rem;
+        }
+        [data-testid="stSpinner"] * {
             color: #111827 !important;
         }
         </style>
