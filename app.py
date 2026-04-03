@@ -328,13 +328,19 @@ def render_condition_stacked_bar(
 ) -> None:
     n_conditions = int(df[condition_col].astype(str).nunique()) if not df.empty else 1
     fig_width = max(620, 140 + n_conditions * 78 + 240)
+    condition_values = df[condition_col].astype(str).unique().tolist()
+    ordered_conditions = [c for c in CONDITION_ORDER if c in condition_values]
+    ordered_conditions.extend([c for c in condition_values if c not in ordered_conditions])
+    subtype_values = df[subtype_col].astype(str).unique().tolist()
+    ordered_subtypes = [s for s in CELL_TYPE_ORDER if s in subtype_values]
+    ordered_subtypes.extend([s for s in subtype_values if s not in ordered_subtypes])
     fig = px.bar(
         df,
         x=condition_col,
         y=value_col,
         color=subtype_col,
         barmode="stack",
-        category_orders={"condition": CONDITION_ORDER, "cell_type": CELL_TYPE_ORDER},
+        category_orders={condition_col: ordered_conditions, subtype_col: ordered_subtypes},
         color_discrete_map=CELL_TYPE_COLOR_MAP if subtype_col == "cell_type" else None,
         title=title,
         hover_data={value_col: ":.2f", "n_observed": True},
