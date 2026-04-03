@@ -324,17 +324,19 @@ def render_condition_stacked_bar(
     subtype_col: str,
     value_col: str,
     title: str,
+    condition_order: Optional[List[str]] = None,
     height: int = 430,
 ) -> None:
     n_conditions = int(df[condition_col].astype(str).nunique()) if not df.empty else 1
     fig_width = max(620, 140 + n_conditions * 78 + 240)
+    ordered_conditions = condition_order or sorted(df[condition_col].astype(str).unique().tolist())
     fig = px.bar(
         df,
         x=condition_col,
         y=value_col,
         color=subtype_col,
         barmode="stack",
-        category_orders={"condition": CONDITION_ORDER, "cell_type": CELL_TYPE_ORDER},
+        category_orders={"condition": ordered_conditions, "cell_type": CELL_TYPE_ORDER},
         color_discrete_map=CELL_TYPE_COLOR_MAP if subtype_col == "cell_type" else None,
         title=title,
         hover_data={value_col: ":.2f", "n_observed": True},
@@ -776,6 +778,8 @@ def main() -> None:
             st.stop()
 
         selected_conditions = selected_conditions_for_browser or sorted(analysis_obs["condition"].unique().tolist())
+        selected_condition_order = [c for c in CONDITION_ORDER if c in set(selected_conditions)]
+        selected_condition_order.extend([c for c in selected_conditions if c not in selected_condition_order])
 
         counts = build_condition_subtype_counts(
             analysis_obs,
@@ -802,6 +806,7 @@ def main() -> None:
                 subtype_col="cell_type",
                 value_col="proportion_pct",
                 title="Cell subtype proportions by condition",
+                condition_order=selected_condition_order,
             )
 
         roe_df = compute_roe(counts, condition_col="condition", subtype_col="cell_type")
