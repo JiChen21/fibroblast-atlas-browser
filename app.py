@@ -522,11 +522,16 @@ def main() -> None:
             )
 
             st.subheader("Filters")
+            filter_columns_for_module = list(filter_options.keys())
+            if module == "Disease–subtype compare":
+                # Condition selection is managed by the dedicated selector below.
+                filter_columns_for_module = [c for c in filter_columns_for_module if c != "condition"]
             if st.button("Reset filters", width="stretch"):
-                for col in filter_options:
+                for col in filter_columns_for_module:
                     st.session_state[f"filter_{col}"] = []
 
-            for col, options in filter_options.items():
+            for col in filter_columns_for_module:
+                options = filter_options[col]
                 key = f"filter_{col}"
                 if key not in st.session_state:
                     st.session_state[key] = []
@@ -563,6 +568,7 @@ def main() -> None:
                     "Choose conditions",
                     options=condition_options,
                     default=condition_options,
+                    key="compare_conditions",
                     help="Select one or multiple conditions to compare subtype composition and enrichment.",
                 )
 
