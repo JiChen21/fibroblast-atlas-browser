@@ -595,7 +595,7 @@ def main() -> None:
             heart diseases, yet their heterogeneity and shared disease-associated states remain incompletely defined.
 
             This atlas curates and integrates 21 publicly available human heart single-cell and single-nucleus
-            transcriptomic datasets, comprising approximately 730,000 fibroblasts from control hearts and eight disease
+            transcriptomic datasets, comprising 700,000+ fibroblasts from control hearts and eight disease
             conditions: hypertrophic cardiomyopathy (HCM), arrhythmogenic cardiomyopathy (ACM), aortic stenosis (AS),
             acute myocardial infarction (AMI), ischemic cardiomyopathy (ICM), dilated cardiomyopathy (DCM), heart failure (HF),
             and COVID-19-associated cardiac injury.
