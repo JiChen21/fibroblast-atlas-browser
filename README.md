@@ -135,7 +135,7 @@ docker run --rm -p 8501:8501 \
 
 ## Performance notes for ~740k cells
 
-For ~739,910 cells, full interactive plotting can be slow depending on hardware.
+For ~700,000+ cells, full interactive plotting can be slow depending on hardware.
 
 - `Auto` mode (default): plots all filtered points up to cap, otherwise stratified downsamples.
 - `Downsampled` mode: always uses stratified subset up to cap.
