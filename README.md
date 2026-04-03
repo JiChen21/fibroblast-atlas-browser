@@ -133,7 +133,7 @@ docker run --rm -p 8501:8501 \
   fibroblast-atlas-browser
 ```
 
-## Performance notes for ~740k cells
+## Performance notes for ~700k cells
 
 For ~700,000+ cells, full interactive plotting can be slow depending on hardware.
 
