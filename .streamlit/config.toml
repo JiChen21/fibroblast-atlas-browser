@@ -2,3 +2,9 @@
 # Hide the Streamlit top-right toolbar (including the Deploy shortcut)
 # in shared/public viewer mode.
 toolbarMode = "minimal"
+
+[theme]
+base = "light"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f7f7f7"
+textColor = "#111827"
