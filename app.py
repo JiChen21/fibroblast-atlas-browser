@@ -324,15 +324,19 @@ def render_condition_stacked_bar(
     subtype_col: str,
     value_col: str,
     title: str,
+    condition_order: Optional[List[str]] = None,
     height: int = 430,
 ) -> None:
+    n_conditions = int(df[condition_col].astype(str).nunique()) if not df.empty else 1
+    fig_width = max(620, 140 + n_conditions * 78 + 240)
+    ordered_conditions = condition_order or sorted(df[condition_col].astype(str).unique().tolist())
     fig = px.bar(
         df,
         x=condition_col,
         y=value_col,
         color=subtype_col,
         barmode="stack",
-        category_orders={"condition": CONDITION_ORDER, "cell_type": CELL_TYPE_ORDER},
+        category_orders={"condition": ordered_conditions, "cell_type": CELL_TYPE_ORDER},
         color_discrete_map=CELL_TYPE_COLOR_MAP if subtype_col == "cell_type" else None,
         title=title,
         hover_data={value_col: ":.2f", "n_observed": True},
@@ -340,12 +344,13 @@ def render_condition_stacked_bar(
     fig.update_yaxes(title="Proportion (%)")
     fig.update_layout(
         height=height,
+        width=fig_width,
         template="plotly_white",
         paper_bgcolor="#ffffff",
         plot_bgcolor="#ffffff",
         font={"color": "#111827"},
     )
-    st.plotly_chart(fig, width="stretch", theme=None)
+    st.plotly_chart(fig, width="content", theme=None)
 
 
 def render_roe_heatmap(
@@ -392,8 +397,11 @@ def render_roe_heatmap(
         aspect="auto",
     )
     fig.update_traces(text=text_mat, texttemplate="%{text}", textfont={"size": 11, "color": "black"})
+    n_conditions = max(1, len(heatmap_df.columns))
+    fig_width = max(620, 160 + n_conditions * 78)
     fig.update_layout(
         height=height,
+        width=fig_width,
         template="plotly_white",
         paper_bgcolor="#ffffff",
         plot_bgcolor="#ffffff",
@@ -404,7 +412,7 @@ def render_roe_heatmap(
             "ticktext": ["≤-3", "-2", "-1", "0", "1", "2", "≥3"],
         },
     )
-    st.plotly_chart(fig, width="stretch", theme=None)
+    st.plotly_chart(fig, width="content", theme=None)
 
 
 def apply_global_styles() -> None:
@@ -453,6 +461,17 @@ def apply_global_styles() -> None:
             border: 1px solid #d1d5db !important;
         }
         .stRadio > div[role="radiogroup"] label {
+            color: #111827 !important;
+        }
+        /* Keep loading placeholder readable under custom theme overrides */
+        [data-testid="stSpinner"] {
+            background-color: #ffffff !important;
+            color: #111827 !important;
+            border: 1px solid #e5e7eb !important;
+            border-radius: 0.5rem;
+            padding: 0.35rem 0.5rem;
+        }
+        [data-testid="stSpinner"] * {
             color: #111827 !important;
         }
         </style>
@@ -522,11 +541,16 @@ def main() -> None:
             )
 
             st.subheader("Filters")
+            filter_columns_for_module = list(filter_options.keys())
+            if module == "Disease–subtype compare":
+                # Condition selection is managed by the dedicated selector below.
+                filter_columns_for_module = [c for c in filter_columns_for_module if c != "condition"]
             if st.button("Reset filters", width="stretch"):
-                for col in filter_options:
+                for col in filter_columns_for_module:
                     st.session_state[f"filter_{col}"] = []
 
-            for col, options in filter_options.items():
+            for col in filter_columns_for_module:
+                options = filter_options[col]
                 key = f"filter_{col}"
                 if key not in st.session_state:
                     st.session_state[key] = []
@@ -563,6 +587,7 @@ def main() -> None:
                     "Choose conditions",
                     options=condition_options,
                     default=condition_options,
+                    key="compare_conditions",
                     help="Select one or multiple conditions to compare subtype composition and enrichment.",
                 )
 
@@ -753,6 +778,8 @@ def main() -> None:
             st.stop()
 
         selected_conditions = selected_conditions_for_browser or sorted(analysis_obs["condition"].unique().tolist())
+        selected_condition_order = [c for c in CONDITION_ORDER if c in set(selected_conditions)]
+        selected_condition_order.extend([c for c in selected_conditions if c not in selected_condition_order])
 
         counts = build_condition_subtype_counts(
             analysis_obs,
@@ -779,6 +806,7 @@ def main() -> None:
                 subtype_col="cell_type",
                 value_col="proportion_pct",
                 title="Cell subtype proportions by condition",
+                condition_order=selected_condition_order,
             )
 
         roe_df = compute_roe(counts, condition_col="condition", subtype_col="cell_type")
@@ -797,69 +825,6 @@ def main() -> None:
             "Symbol rules: +++ / --- (|log2FC| ≥ 0.58), ++ / -- (≥ 0.32), + / - (≥ 0.10), +/- (near neutral). "
             "Heatmap color scale is clipped to [-3, 3] on log2(Ro/e)."
         )
-
-    elif module == "Disease–subtype compare":
-        st.subheader("Disease–subtype compare")
-        st.caption("Compare subtype proportions across selected conditions and inspect log2(Observed/Expected) enrichment.")
-
-        if "condition" not in adata.obs.columns or "cell_type" not in adata.obs.columns:
-            st.error("This module requires both 'condition' and 'cell_type' columns in adata.obs.")
-            st.stop()
-
-        analysis_obs = adata.obs.iloc[filtered_indices][["condition", "cell_type"]].copy()
-        analysis_obs["condition"] = analysis_obs["condition"].astype(str)
-        analysis_obs["cell_type"] = analysis_obs["cell_type"].astype(str)
-
-        if analysis_obs.empty:
-            st.warning("No cells matched the current filters. Please adjust filters in the sidebar.")
-            st.stop()
-
-        selected_conditions = selected_conditions_for_browser or sorted(analysis_obs["condition"].unique().tolist())
-
-        counts = build_condition_subtype_counts(
-            analysis_obs,
-            condition_col="condition",
-            subtype_col="cell_type",
-            selected_conditions=selected_conditions,
-            condition_order=CONDITION_ORDER,
-            subtype_order=CELL_TYPE_ORDER,
-        )
-        if counts.empty:
-            st.warning("No data available for the selected conditions under current filters.")
-            st.stop()
-
-        proportion_df = counts.copy()
-        totals = proportion_df.groupby("condition", observed=False)["n_observed"].transform("sum")
-        proportion_df["proportion_pct"] = np.where(totals > 0, proportion_df["n_observed"] / totals * 100.0, 0.0)
-
-        left_col, right_col = st.columns(2)
-        with left_col:
-            st.markdown("#### Subtype composition (stacked proportions)")
-            render_condition_stacked_bar(
-                proportion_df,
-                condition_col="condition",
-                subtype_col="cell_type",
-                value_col="proportion_pct",
-                title="Cell subtype proportions by condition",
-            )
-
-        roe_df = compute_roe(counts, condition_col="condition", subtype_col="cell_type")
-        with right_col:
-            st.markdown("#### Ro/e heatmap (log2 scale)")
-            render_roe_heatmap(
-                roe_df,
-                condition_col="condition",
-                subtype_col="cell_type",
-                title="Fibroblast subtype enrichment (log2[Observed/Expected])",
-                condition_order=CONDITION_ORDER,
-                subtype_order=CELL_TYPE_ORDER,
-            )
-
-        st.caption(
-            "Symbol rules: +++ / --- (|log2FC| ≥ 0.58), ++ / -- (≥ 0.32), + / - (≥ 0.10), +/- (near neutral). "
-            "Heatmap color scale is clipped to [-3, 3] on log2(Ro/e)."
-        )
-
 
 if __name__ == "__main__":
     main()
