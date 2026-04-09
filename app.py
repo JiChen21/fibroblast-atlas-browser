@@ -64,6 +64,15 @@ CONDITION_COLOR_MAP = {
     "HF": "#c51b7d",
     "COVID19": "#17becf",
 }
+COPYRIGHT_NOTICE = (
+    "Copyright © 2026. State Key Laboratory of Frigid Zone Cardiovascular Diseases "
+    "(SKLFZCD), Harbin Medical University, China."
+)
+CONTACTS = [
+    ("Yong Ji", "yongji@hrbmu.edu.cn"),
+    ("Qinghua Jiang", "qhjiang@hrbmu.edu.cn"),
+    ("Ji Chen", "jichen@hrbmu.edu.cn"),
+]
 
 logger = logging.getLogger(__name__)
 if not logger.handlers:
@@ -222,7 +231,7 @@ def render_umap(
         font={"color": "#111827"},
     )
     fig.update_yaxes(scaleanchor="x", scaleratio=1)
-    st.plotly_chart(fig, width="stretch", theme=None)
+    st.plotly_chart(fig, use_container_width=True, theme=None)
 
 
 def render_violin(
@@ -257,7 +266,7 @@ def render_violin(
         plot_bgcolor="#ffffff",
         font={"color": "#111827"},
     )
-    st.plotly_chart(fig, width="stretch", theme=None)
+    st.plotly_chart(fig, use_container_width=True, theme=None)
 
 
 def build_group_expression_stats(df: pd.DataFrame, group_col: str, expr_col: str) -> pd.DataFrame:
@@ -315,7 +324,7 @@ def render_dotplot(
         plot_bgcolor="#ffffff",
         font={"color": "#111827"},
     )
-    st.plotly_chart(fig, width="stretch", theme=None)
+    st.plotly_chart(fig, use_container_width=True, theme=None)
 
 
 def render_condition_stacked_bar(
@@ -416,7 +425,7 @@ def render_roe_heatmap(
             "ticktext": ["≤-3", "-2", "-1", "0", "1", "2", "≥3"],
         },
     )
-    st.plotly_chart(fig, width="content", theme=None)
+    st.plotly_chart(fig, use_container_width=True, theme=None)
 
 
 def apply_global_styles() -> None:
@@ -484,6 +493,14 @@ def apply_global_styles() -> None:
     )
 
 
+def render_divider() -> None:
+    """Backwards-compatible divider for older Streamlit versions (e.g., 1.20)."""
+    if hasattr(st, "divider"):
+        st.divider()
+        return
+    st.markdown("---")
+
+
 def main() -> None:
     st.set_page_config(page_title="Single-cell AnnData Explorer", layout="wide")
     apply_global_styles()
@@ -521,7 +538,7 @@ def main() -> None:
     filter_options = get_filter_options(adata, tuple(FILTER_COLUMNS))
     module = st.radio(
         "Navigation",
-        ["Atlas Overview", "Metadata Explore", "Gene Query", "Disease–subtype compare"],
+        ["Atlas Overview", "Metadata Explore", "Gene Query", "Disease–subtype compare", "Contact"],
         horizontal=True,
         label_visibility="collapsed",
     )
@@ -549,7 +566,7 @@ def main() -> None:
             if module == "Disease–subtype compare":
                 # Condition selection is managed by the dedicated selector below.
                 filter_columns_for_module = [c for c in filter_columns_for_module if c != "condition"]
-            if st.button("Reset filters", width="stretch"):
+            if st.button("Reset filters", use_container_width=True):
                 for col in filter_columns_for_module:
                     st.session_state[f"filter_{col}"] = []
 
@@ -641,7 +658,7 @@ def main() -> None:
                 st.image(
                     home_image_path,
                     caption="Fibroblast atlas overview figure",
-                    use_container_width=False,
+                    use_column_width=False,
                     width=1500,
                 )
         else:
@@ -826,6 +843,17 @@ def main() -> None:
             "Symbol rules: +++ / --- (|log2FC| ≥ 0.58), ++ / -- (≥ 0.32), + / - (≥ 0.10), +/- (near neutral). "
             "Heatmap color scale is clipped to [-3, 3] on log2(Ro/e)."
         )
+
+    elif module == "Contact":
+        st.subheader("Contact")
+        st.markdown(
+            "If you have any questions or find any problems, please feel free to contact us."
+        )
+        for name, email in CONTACTS:
+            st.markdown(f"- **{name}**: {email}")
+
+    render_divider()
+    st.caption(COPYRIGHT_NOTICE)
 
 if __name__ == "__main__":
     main()
