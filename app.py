@@ -493,6 +493,14 @@ def apply_global_styles() -> None:
     )
 
 
+def render_divider() -> None:
+    """Backwards-compatible divider for older Streamlit versions (e.g., 1.20)."""
+    if hasattr(st, "divider"):
+        st.divider()
+        return
+    st.markdown("---")
+
+
 def main() -> None:
     st.set_page_config(page_title="Single-cell AnnData Explorer", layout="wide")
     apply_global_styles()
@@ -844,7 +852,7 @@ def main() -> None:
         for name, email in CONTACTS:
             st.markdown(f"- **{name}**: {email}")
 
-    st.divider()
+    render_divider()
     st.caption(COPYRIGHT_NOTICE)
 
 if __name__ == "__main__":
