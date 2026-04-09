@@ -265,7 +265,6 @@ def render_violin(
         line_width=1.8,
         width=0.9,
         spanmode="hard",
-        inner="quartile",
     )
     fig.update_layout(
         height=height,
