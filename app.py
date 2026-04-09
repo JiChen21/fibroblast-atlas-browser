@@ -222,7 +222,7 @@ def render_umap(
         font={"color": "#111827"},
     )
     fig.update_yaxes(scaleanchor="x", scaleratio=1)
-    st.plotly_chart(fig, width="stretch", theme=None)
+    st.plotly_chart(fig, use_container_width=True, theme=None)
 
 
 def render_violin(
@@ -257,7 +257,7 @@ def render_violin(
         plot_bgcolor="#ffffff",
         font={"color": "#111827"},
     )
-    st.plotly_chart(fig, width="stretch", theme=None)
+    st.plotly_chart(fig, use_container_width=True, theme=None)
 
 
 def build_group_expression_stats(df: pd.DataFrame, group_col: str, expr_col: str) -> pd.DataFrame:
@@ -315,7 +315,7 @@ def render_dotplot(
         plot_bgcolor="#ffffff",
         font={"color": "#111827"},
     )
-    st.plotly_chart(fig, width="stretch", theme=None)
+    st.plotly_chart(fig, use_container_width=True, theme=None)
 
 
 def render_condition_stacked_bar(
@@ -549,7 +549,7 @@ def main() -> None:
             if module == "Disease–subtype compare":
                 # Condition selection is managed by the dedicated selector below.
                 filter_columns_for_module = [c for c in filter_columns_for_module if c != "condition"]
-            if st.button("Reset filters", width="stretch"):
+            if st.button("Reset filters", use_container_width=True):
                 for col in filter_columns_for_module:
                     st.session_state[f"filter_{col}"] = []
 
@@ -641,7 +641,7 @@ def main() -> None:
                 st.image(
                     home_image_path,
                     caption="Fibroblast atlas overview figure",
-                    use_container_width=False,
+                    use_column_width=False,
                     width=1500,
                 )
         else:
