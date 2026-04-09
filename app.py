@@ -64,6 +64,15 @@ CONDITION_COLOR_MAP = {
     "HF": "#c51b7d",
     "COVID19": "#17becf",
 }
+COPYRIGHT_NOTICE = (
+    "Copyright © 2026. State Key Laboratory of Frigid Zone Cardiovascular Diseases "
+    "(SKLFZCD), Harbin Medical University, China."
+)
+CONTACTS = [
+    ("Yong Ji", "yongji@hrbmu.edu.cn"),
+    ("Qinghua Jiang", "qhjiang@hrbmu.edu.cn"),
+    ("Ji Chen", "jichen@hrbmu.edu.cn"),
+]
 
 logger = logging.getLogger(__name__)
 if not logger.handlers:
@@ -416,7 +425,7 @@ def render_roe_heatmap(
             "ticktext": ["≤-3", "-2", "-1", "0", "1", "2", "≥3"],
         },
     )
-    st.plotly_chart(fig, width="content", theme=None)
+    st.plotly_chart(fig, use_container_width=True, theme=None)
 
 
 def apply_global_styles() -> None:
@@ -521,7 +530,7 @@ def main() -> None:
     filter_options = get_filter_options(adata, tuple(FILTER_COLUMNS))
     module = st.radio(
         "Navigation",
-        ["Atlas Overview", "Metadata Explore", "Gene Query", "Disease–subtype compare"],
+        ["Atlas Overview", "Metadata Explore", "Gene Query", "Disease–subtype compare", "Contact"],
         horizontal=True,
         label_visibility="collapsed",
     )
@@ -826,6 +835,17 @@ def main() -> None:
             "Symbol rules: +++ / --- (|log2FC| ≥ 0.58), ++ / -- (≥ 0.32), + / - (≥ 0.10), +/- (near neutral). "
             "Heatmap color scale is clipped to [-3, 3] on log2(Ro/e)."
         )
+
+    elif module == "Contact":
+        st.subheader("Contact")
+        st.markdown(
+            "If you have any questions or find any problems, please feel free to contact us."
+        )
+        for name, email in CONTACTS:
+            st.markdown(f"- **{name}**: {email}")
+
+    st.divider()
+    st.caption(COPYRIGHT_NOTICE)
 
 if __name__ == "__main__":
     main()
