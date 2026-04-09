@@ -817,7 +817,7 @@ def main() -> None:
                     "Please ensure obs includes both 'cell_type' and 'condition'."
                 )
         else:
-            st.info("Select a gene in the sidebar to display expression on UMAP.")
+            st.info("Please enter a gene (human gene symbol) in the sidebar.")
 
     elif module == "Disease–subtype compare":
         st.subheader("Disease–subtype compare")
