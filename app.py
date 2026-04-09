@@ -350,8 +350,6 @@ def render_condition_stacked_bar(
     title: str,
     height: int = 430,
 ) -> None:
-    n_conditions = int(df[condition_col].astype(str).nunique()) if not df.empty else 1
-    fig_width = max(620, 140 + n_conditions * 78 + 240)
     condition_values = df[condition_col].astype(str).unique().tolist()
     ordered_conditions = [c for c in CONDITION_ORDER if c in condition_values]
     ordered_conditions.extend([c for c in condition_values if c not in ordered_conditions])
@@ -372,13 +370,17 @@ def render_condition_stacked_bar(
     fig.update_yaxes(title="Proportion (%)")
     fig.update_layout(
         height=height,
-        width=fig_width,
+        bargap=0.28,
+        bargroupgap=0.0,
+        margin={"l": 16, "r": 16, "t": 56, "b": 72},
         template="plotly_white",
         paper_bgcolor="#ffffff",
         plot_bgcolor="#ffffff",
         font={"color": "#111827"},
     )
-    st.plotly_chart(fig, width="content", theme=None)
+    fig.update_xaxes(automargin=True)
+    fig.update_yaxes(automargin=True)
+    st.plotly_chart(fig, use_container_width=True, theme=None)
 
 
 def render_roe_heatmap(
