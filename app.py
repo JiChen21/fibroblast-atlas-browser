@@ -19,6 +19,7 @@ from core import (
 )
 
 DEFAULT_H5AD_PATH = "./data/FBs_adata.h5ad"
+DEFAULT_DATA_SOURCES_PATH = os.getenv("DATA_SOURCES_PATH", "./assets/data_sources.csv")
 DEFAULT_MAX_POINTS = int(os.getenv("UMAP_MAX_POINTS", "200000"))
 STRICT_DATA_MODE = os.getenv("STRICT_DATA", "false").strip().lower() in {"1", "true", "yes", "on"}
 FILTER_COLUMNS = [
@@ -93,6 +94,24 @@ def resolve_home_image_path() -> Optional[str]:
         if path and os.path.exists(path):
             return path
     return None
+
+
+@st.cache_data(show_spinner=False)
+def load_data_sources_table(path: str) -> pd.DataFrame:
+    if not os.path.exists(path):
+        return pd.DataFrame()
+    df = pd.read_csv(path)
+    if df.empty:
+        return df
+    df = df.fillna("").astype(str)
+    if "PubMed ID" in df.columns:
+        pmid_digits = df["PubMed ID"].str.extract(r"(\d+)", expand=False).fillna("")
+        df["PubMed Link"] = np.where(
+            pmid_digits != "",
+            "https://pubmed.ncbi.nlm.nih.gov/" + pmid_digits + "/",
+            "",
+        )
+    return df
 
 
 def build_mock_adata(n_cells: int = 3000, n_genes: int = 80) -> ad.AnnData:
@@ -254,18 +273,30 @@ def render_violin(
             "cell_type": CELL_TYPE_ORDER,
             "condition": CONDITION_ORDER,
         },
-        box=True,
+        box=False,
         points=False,
         title=title,
+    )
+    fig.update_traces(
+        meanline_visible=True,
+        scalemode="width",
+        opacity=0.75,
+        line_width=1.8,
+        width=0.9,
+        spanmode="hard",
     )
     fig.update_layout(
         height=height,
         showlegend=show_legend,
+        violinmode="group",
         template="plotly_white",
         paper_bgcolor="#ffffff",
         plot_bgcolor="#ffffff",
         font={"color": "#111827"},
+        margin={"l": 16, "r": 16, "t": 56, "b": 72},
     )
+    fig.update_xaxes(tickangle=-15, automargin=True)
+    fig.update_yaxes(automargin=True, rangemode="tozero", title="gene_expression")
     st.plotly_chart(fig, use_container_width=True, theme=None)
 
 
@@ -323,7 +354,10 @@ def render_dotplot(
         paper_bgcolor="#ffffff",
         plot_bgcolor="#ffffff",
         font={"color": "#111827"},
+        margin={"l": 16, "r": 16, "t": 56, "b": 72},
     )
+    fig.update_xaxes(tickangle=-15, automargin=True)
+    fig.update_yaxes(automargin=True)
     st.plotly_chart(fig, use_container_width=True, theme=None)
 
 
@@ -335,8 +369,6 @@ def render_condition_stacked_bar(
     title: str,
     height: int = 430,
 ) -> None:
-    n_conditions = int(df[condition_col].astype(str).nunique()) if not df.empty else 1
-    fig_width = max(620, 140 + n_conditions * 78 + 240)
     condition_values = df[condition_col].astype(str).unique().tolist()
     ordered_conditions = [c for c in CONDITION_ORDER if c in condition_values]
     ordered_conditions.extend([c for c in condition_values if c not in ordered_conditions])
@@ -357,13 +389,17 @@ def render_condition_stacked_bar(
     fig.update_yaxes(title="Proportion (%)")
     fig.update_layout(
         height=height,
-        width=fig_width,
+        bargap=0.28,
+        bargroupgap=0.0,
+        margin={"l": 16, "r": 16, "t": 56, "b": 72},
         template="plotly_white",
         paper_bgcolor="#ffffff",
         plot_bgcolor="#ffffff",
         font={"color": "#111827"},
     )
-    st.plotly_chart(fig, width="content", theme=None)
+    fig.update_xaxes(automargin=True)
+    fig.update_yaxes(automargin=True)
+    st.plotly_chart(fig, use_container_width=True, theme=None)
 
 
 def render_roe_heatmap(
@@ -538,7 +574,7 @@ def main() -> None:
     filter_options = get_filter_options(adata, tuple(FILTER_COLUMNS))
     module = st.radio(
         "Navigation",
-        ["Atlas Overview", "Metadata Explore", "Gene Query", "Disease–subtype compare", "Contact"],
+        ["Atlas Overview", "Metadata Explore", "Gene Query", "Disease–subtype compare", "Data", "About"],
         horizontal=True,
         label_visibility="collapsed",
     )
@@ -702,6 +738,7 @@ def main() -> None:
     elif module == "Gene Query":
         st.subheader("Gene Query")
         st.caption("Compact layout: expression UMAP + cell_type violin on top, condition dot/violin below.")
+        gene_query_plot_height = 460
         if gene_query:
             try:
                 with st.spinner(f"Querying gene '{gene_query}' and rendering plots..."):
@@ -726,14 +763,14 @@ def main() -> None:
                             expr_matrix, gene_idx, analysis_indices
                         )
 
-                        top_left, top_right = st.columns(2)
+                        top_left, top_right = st.columns([1, 1], gap="large")
                         with top_left:
                             render_umap(
                                 plot_df,
                                 color="gene_expression",
                                 title=f"UMAP • {gene_query} expression ({expression_source})",
                                 continuous=True,
-                                height=500,
+                                height=gene_query_plot_height,
                             )
                         with top_right:
                             render_violin(
@@ -742,12 +779,12 @@ def main() -> None:
                                 y="gene_expression",
                                 color="cell_type",
                                 title=f"{gene_query} expression across cell types",
-                                height=500,
+                                height=gene_query_plot_height,
                                 show_legend=False,
                             )
 
                         st.subheader(f"{gene_query} expression in different conditions")
-                        bottom_left, bottom_right = st.columns(2)
+                        bottom_left, bottom_right = st.columns([1, 1], gap="large")
                         with bottom_left:
                             cond_stats = build_group_expression_stats(
                                 analysis_df, group_col="condition", expr_col="gene_expression"
@@ -759,7 +796,7 @@ def main() -> None:
                                 size="pct_expressing",
                                 color="condition",
                                 title=f"{gene_query} condition dot plot (size=% expressing)",
-                                height=360,
+                                height=gene_query_plot_height,
                                 show_legend=False,
                             )
                         with bottom_right:
@@ -769,7 +806,7 @@ def main() -> None:
                                 y="gene_expression",
                                 color="condition",
                                 title=f"{gene_query} condition violin plot",
-                                height=360,
+                                height=gene_query_plot_height,
                                 show_legend=False,
                             )
             except ValueError as exc:
@@ -844,11 +881,39 @@ def main() -> None:
             "Heatmap color scale is clipped to [-3, 3] on log2(Ro/e)."
         )
 
-    elif module == "Contact":
-        st.subheader("Contact")
+    elif module == "Data":
+        st.subheader("Data sources")
+        sources_df = load_data_sources_table(DEFAULT_DATA_SOURCES_PATH)
+        if sources_df.empty:
+            st.warning(
+                f"No data source table found at `{DEFAULT_DATA_SOURCES_PATH}`. "
+                "Please provide a CSV with columns: Study Accession, Assay, Conditions included, PubMed ID."
+            )
+        else:
+            display_columns = [c for c in ["Study Accession", "Assay", "Conditions included", "PubMed ID"] if c in sources_df.columns]
+            if "PubMed Link" in sources_df.columns:
+                display_columns.append("PubMed Link")
+            table_df = sources_df[display_columns] if display_columns else sources_df
+            try:
+                st.dataframe(
+                    table_df,
+                    use_container_width=True,
+                    hide_index=True,
+                )
+            except TypeError:
+                st.dataframe(
+                    table_df,
+                    use_container_width=True,
+                )
+
+    elif module == "About":
+        st.subheader("About")
         st.markdown(
-            "If you have any questions or find any problems, please feel free to contact us."
+            "Please cite: **A cross-disease human heart atlas reveals a neurovascular fibroblast state and a drug-targetable activation axis**."
         )
+        st.markdown("---")
+        st.markdown("##### Contact")
+        st.markdown("If you have any questions or find any problems, please feel free to contact us.")
         for name, email in CONTACTS:
             st.markdown(f"- **{name}**: {email}")
 
