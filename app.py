@@ -893,11 +893,18 @@ def main() -> None:
             display_columns = [c for c in ["Study Accession", "Assay", "Conditions included", "PubMed ID"] if c in sources_df.columns]
             if "PubMed Link" in sources_df.columns:
                 display_columns.append("PubMed Link")
-            st.dataframe(
-                sources_df[display_columns] if display_columns else sources_df,
-                use_container_width=True,
-                hide_index=True,
-            )
+            table_df = sources_df[display_columns] if display_columns else sources_df
+            try:
+                st.dataframe(
+                    table_df,
+                    use_container_width=True,
+                    hide_index=True,
+                )
+            except TypeError:
+                st.dataframe(
+                    table_df,
+                    use_container_width=True,
+                )
             st.caption(f"Source file: `{DEFAULT_DATA_SOURCES_PATH}`")
 
     elif module == "About":
