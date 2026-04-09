@@ -883,7 +883,6 @@ def main() -> None:
 
     elif module == "Data":
         st.subheader("Data sources")
-        st.caption("Dataset provenance is loaded from a CSV file so your original .h5ad stays unchanged.")
         sources_df = load_data_sources_table(DEFAULT_DATA_SOURCES_PATH)
         if sources_df.empty:
             st.warning(
@@ -898,9 +897,6 @@ def main() -> None:
                 sources_df[display_columns] if display_columns else sources_df,
                 use_container_width=True,
                 hide_index=True,
-                column_config={
-                    "PubMed Link": st.column_config.LinkColumn("PubMed Link"),
-                },
             )
             st.caption(f"Source file: `{DEFAULT_DATA_SOURCES_PATH}`")
 
