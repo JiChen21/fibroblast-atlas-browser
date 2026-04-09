@@ -115,6 +115,22 @@ If `HOME_IMAGE_PATH` is not set, the app will automatically check:
 
 If one exists, the app shows it on **Home** below the atlas overview text.
 
+## Contact
+
+If you have any questions or find any problems, please feel free to contact us.
+
+- Yong Ji: yongji@hrbmu.edu.cn
+- Qinghua Jiang: qhjiang@hrbmu.edu.cn
+- Ji Chen: jichen@hrbmu.edu.cn
+
+## Copyright
+
+Copyright © 2026. State Key Laboratory of Frigid Zone Cardiovascular Diseases (SKLFZCD), Harbin Medical University, China.
+
+## License
+
+This project is released under the MIT License. See `LICENSE` for full text.
+
 ## Docker
 
 Build image:
