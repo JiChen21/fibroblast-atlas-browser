@@ -19,6 +19,7 @@ from core import (
 )
 
 DEFAULT_H5AD_PATH = "./data/FBs_adata.h5ad"
+DEFAULT_DATA_SOURCES_PATH = os.getenv("DATA_SOURCES_PATH", "./assets/data_sources.csv")
 DEFAULT_MAX_POINTS = int(os.getenv("UMAP_MAX_POINTS", "200000"))
 STRICT_DATA_MODE = os.getenv("STRICT_DATA", "false").strip().lower() in {"1", "true", "yes", "on"}
 FILTER_COLUMNS = [
@@ -93,6 +94,24 @@ def resolve_home_image_path() -> Optional[str]:
         if path and os.path.exists(path):
             return path
     return None
+
+
+@st.cache_data(show_spinner=False)
+def load_data_sources_table(path: str) -> pd.DataFrame:
+    if not os.path.exists(path):
+        return pd.DataFrame()
+    df = pd.read_csv(path)
+    if df.empty:
+        return df
+    df = df.fillna("").astype(str)
+    if "PubMed ID" in df.columns:
+        pmid_digits = df["PubMed ID"].str.extract(r"(\d+)", expand=False).fillna("")
+        df["PubMed Link"] = np.where(
+            pmid_digits != "",
+            "https://pubmed.ncbi.nlm.nih.gov/" + pmid_digits + "/",
+            "",
+        )
+    return df
 
 
 def build_mock_adata(n_cells: int = 3000, n_genes: int = 80) -> ad.AnnData:
@@ -555,7 +574,7 @@ def main() -> None:
     filter_options = get_filter_options(adata, tuple(FILTER_COLUMNS))
     module = st.radio(
         "Navigation",
-        ["Atlas Overview", "Metadata Explore", "Gene Query", "Disease–subtype compare", "Contact"],
+        ["Atlas Overview", "Metadata Explore", "Gene Query", "Disease–subtype compare", "Data", "About"],
         horizontal=True,
         label_visibility="collapsed",
     )
@@ -862,11 +881,37 @@ def main() -> None:
             "Heatmap color scale is clipped to [-3, 3] on log2(Ro/e)."
         )
 
-    elif module == "Contact":
-        st.subheader("Contact")
+    elif module == "Data":
+        st.subheader("Data sources")
+        st.caption("Dataset provenance is loaded from a CSV file so your original .h5ad stays unchanged.")
+        sources_df = load_data_sources_table(DEFAULT_DATA_SOURCES_PATH)
+        if sources_df.empty:
+            st.warning(
+                f"No data source table found at `{DEFAULT_DATA_SOURCES_PATH}`. "
+                "Please provide a CSV with columns: Study Accession, Assay, Conditions included, PubMed ID."
+            )
+        else:
+            display_columns = [c for c in ["Study Accession", "Assay", "Conditions included", "PubMed ID"] if c in sources_df.columns]
+            if "PubMed Link" in sources_df.columns:
+                display_columns.append("PubMed Link")
+            st.dataframe(
+                sources_df[display_columns] if display_columns else sources_df,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "PubMed Link": st.column_config.LinkColumn("PubMed Link"),
+                },
+            )
+            st.caption(f"Source file: `{DEFAULT_DATA_SOURCES_PATH}`")
+
+    elif module == "About":
+        st.subheader("About")
         st.markdown(
-            "If you have any questions or find any problems, please feel free to contact us."
+            "Please cite: **A cross-disease human heart atlas reveals a neurovascular fibroblast state and a drug-targetable activation axis**."
         )
+        st.markdown("---")
+        st.markdown("##### Contact")
+        st.markdown("If you have any questions or find any problems, please feel free to contact us.")
         for name, email in CONTACTS:
             st.markdown(f"- **{name}**: {email}")
 
