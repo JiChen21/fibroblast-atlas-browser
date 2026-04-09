@@ -254,18 +254,30 @@ def render_violin(
             "cell_type": CELL_TYPE_ORDER,
             "condition": CONDITION_ORDER,
         },
-        box=True,
+        box=False,
         points=False,
         title=title,
+    )
+    fig.update_traces(
+        meanline_visible=True,
+        scalemode="width",
+        opacity=0.75,
+        line_width=1.8,
+        width=0.9,
+        spanmode="hard",
     )
     fig.update_layout(
         height=height,
         showlegend=show_legend,
+        violinmode="group",
         template="plotly_white",
         paper_bgcolor="#ffffff",
         plot_bgcolor="#ffffff",
         font={"color": "#111827"},
+        margin={"l": 16, "r": 16, "t": 56, "b": 72},
     )
+    fig.update_xaxes(tickangle=-15, automargin=True)
+    fig.update_yaxes(automargin=True, rangemode="tozero", title="gene_expression")
     st.plotly_chart(fig, use_container_width=True, theme=None)
 
 
@@ -323,7 +335,10 @@ def render_dotplot(
         paper_bgcolor="#ffffff",
         plot_bgcolor="#ffffff",
         font={"color": "#111827"},
+        margin={"l": 16, "r": 16, "t": 56, "b": 72},
     )
+    fig.update_xaxes(tickangle=-15, automargin=True)
+    fig.update_yaxes(automargin=True)
     st.plotly_chart(fig, use_container_width=True, theme=None)
 
 
@@ -335,8 +350,6 @@ def render_condition_stacked_bar(
     title: str,
     height: int = 430,
 ) -> None:
-    n_conditions = int(df[condition_col].astype(str).nunique()) if not df.empty else 1
-    fig_width = max(620, 140 + n_conditions * 78 + 240)
     condition_values = df[condition_col].astype(str).unique().tolist()
     ordered_conditions = [c for c in CONDITION_ORDER if c in condition_values]
     ordered_conditions.extend([c for c in condition_values if c not in ordered_conditions])
@@ -357,13 +370,17 @@ def render_condition_stacked_bar(
     fig.update_yaxes(title="Proportion (%)")
     fig.update_layout(
         height=height,
-        width=fig_width,
+        bargap=0.28,
+        bargroupgap=0.0,
+        margin={"l": 16, "r": 16, "t": 56, "b": 72},
         template="plotly_white",
         paper_bgcolor="#ffffff",
         plot_bgcolor="#ffffff",
         font={"color": "#111827"},
     )
-    st.plotly_chart(fig, width="content", theme=None)
+    fig.update_xaxes(automargin=True)
+    fig.update_yaxes(automargin=True)
+    st.plotly_chart(fig, use_container_width=True, theme=None)
 
 
 def render_roe_heatmap(
@@ -702,6 +719,7 @@ def main() -> None:
     elif module == "Gene Query":
         st.subheader("Gene Query")
         st.caption("Compact layout: expression UMAP + cell_type violin on top, condition dot/violin below.")
+        gene_query_plot_height = 460
         if gene_query:
             try:
                 with st.spinner(f"Querying gene '{gene_query}' and rendering plots..."):
@@ -726,14 +744,14 @@ def main() -> None:
                             expr_matrix, gene_idx, analysis_indices
                         )
 
-                        top_left, top_right = st.columns(2)
+                        top_left, top_right = st.columns([1, 1], gap="large")
                         with top_left:
                             render_umap(
                                 plot_df,
                                 color="gene_expression",
                                 title=f"UMAP • {gene_query} expression ({expression_source})",
                                 continuous=True,
-                                height=500,
+                                height=gene_query_plot_height,
                             )
                         with top_right:
                             render_violin(
@@ -742,12 +760,12 @@ def main() -> None:
                                 y="gene_expression",
                                 color="cell_type",
                                 title=f"{gene_query} expression across cell types",
-                                height=500,
+                                height=gene_query_plot_height,
                                 show_legend=False,
                             )
 
                         st.subheader(f"{gene_query} expression in different conditions")
-                        bottom_left, bottom_right = st.columns(2)
+                        bottom_left, bottom_right = st.columns([1, 1], gap="large")
                         with bottom_left:
                             cond_stats = build_group_expression_stats(
                                 analysis_df, group_col="condition", expr_col="gene_expression"
@@ -759,7 +777,7 @@ def main() -> None:
                                 size="pct_expressing",
                                 color="condition",
                                 title=f"{gene_query} condition dot plot (size=% expressing)",
-                                height=360,
+                                height=gene_query_plot_height,
                                 show_legend=False,
                             )
                         with bottom_right:
@@ -769,7 +787,7 @@ def main() -> None:
                                 y="gene_expression",
                                 color="condition",
                                 title=f"{gene_query} condition violin plot",
-                                height=360,
+                                height=gene_query_plot_height,
                                 show_legend=False,
                             )
             except ValueError as exc:
