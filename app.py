@@ -18,7 +18,10 @@ from core import (
     validate_core_metadata,
 )
 
-DEFAULT_H5AD_PATH = "./data/FBs_adata.h5ad"
+DEFAULT_H5AD_CANDIDATES = [
+    "./data/FBs_adata_slim.h5ad",
+    "./data/FBs_adata.h5ad",
+]
 DEFAULT_DATA_SOURCES_PATH = os.getenv("DATA_SOURCES_PATH", "./assets/data_sources.csv")
 DEFAULT_MAX_POINTS = int(os.getenv("UMAP_MAX_POINTS", "200000"))
 STRICT_DATA_MODE = os.getenv("STRICT_DATA", "false").strip().lower() in {"1", "true", "yes", "on"}
@@ -83,10 +86,21 @@ if not logger.handlers:
     )
 
 
+def resolve_default_h5ad_path() -> str:
+    configured = os.getenv("H5AD_PATH", "").strip()
+    if configured:
+        return configured
+    for path in DEFAULT_H5AD_CANDIDATES:
+        if os.path.exists(path):
+            return path
+    return DEFAULT_H5AD_CANDIDATES[0]
+
+
 def resolve_home_image_path() -> Optional[str]:
     configured = os.getenv("HOME_IMAGE_PATH", "").strip()
     candidates = [
         configured,
+        "./plot/home_page.png",
         "./assets/home_overview.png",
         "/data/chenji/fibroblast-atlas-browser-new/plot/home_page.jpg",
     ]
@@ -542,7 +556,7 @@ def main() -> None:
     apply_global_styles()
     st.title("Cross-disease Human Heart Fibroblast Atlas")
 
-    default_path = os.getenv("H5AD_PATH", DEFAULT_H5AD_PATH)
+    default_path = resolve_default_h5ad_path()
     adata, is_demo, status_msg = load_adata(default_path)
     if STRICT_DATA_MODE and is_demo:
         st.error(
@@ -577,6 +591,7 @@ def main() -> None:
         ["Atlas Overview", "Metadata Explore", "Gene Query", "Disease–subtype compare", "Data", "About"],
         horizontal=True,
         label_visibility="collapsed",
+        key="nav_module",
     )
 
     color_by = "cell_type" if "cell_type" in color_candidates else color_candidates[0]
@@ -595,6 +610,7 @@ def main() -> None:
                 "Metadata color selector",
                 options=color_candidates,
                 index=color_candidates.index(color_by) if color_by in color_candidates else 0,
+                key="sidebar_color_by",
             )
 
             st.subheader("Filters")
@@ -602,7 +618,7 @@ def main() -> None:
             if module == "Disease–subtype compare":
                 # Condition selection is managed by the dedicated selector below.
                 filter_columns_for_module = [c for c in filter_columns_for_module if c != "condition"]
-            if st.button("Reset filters", use_container_width=True):
+            if st.button("Reset filters", use_container_width=True, key=f"reset_filters_{module}"):
                 for col in filter_columns_for_module:
                     st.session_state[f"filter_{col}"] = []
 
@@ -614,7 +630,12 @@ def main() -> None:
                 selected_filters[col] = st.multiselect(col, options=options, key=key)
 
             st.subheader("Visualization performance")
-            view_mode = st.radio("UMAP view mode", ["Auto", "Downsampled", "Full"], index=0)
+            view_mode = st.radio(
+                "UMAP view mode",
+                ["Auto", "Downsampled", "Full"],
+                index=0,
+                key=f"umap_view_mode_{module}",
+            )
             max_points = int(
                 st.number_input(
                     "Display point cap",
@@ -623,6 +644,7 @@ def main() -> None:
                     value=min(DEFAULT_MAX_POINTS, max(10000, adata.n_obs)),
                     step=10000,
                     help="Used in Auto/Downsampled mode to keep plotting responsive.",
+                    key=f"display_point_cap_{module}",
                 )
             )
 
@@ -634,6 +656,7 @@ def main() -> None:
                     value="",
                     placeholder="e.g., COL1A1",
                     help="Gene names are resolved directly from adata.var_names.",
+                    key="gene_query_input",
                 ).strip()
 
             if module == "Disease–subtype compare":
@@ -700,15 +723,17 @@ def main() -> None:
         else:
             st.caption(
                 "Tip: set `HOME_IMAGE_PATH` or place an image at "
-                "`./assets/home_overview.png` "
+                "`./plot/home_page.png` or `./assets/home_overview.png` "
                 "(also supports `/data/chenji/fibroblast-atlas-browser-new/plot/home_page.jpg`)."
             )
         st.subheader("How to use this portal")
         st.markdown(
             """
             1. Use **Metadata Explore** to inspect UMAP distributions and subset cells with sidebar filters.  
-            2. Use **Gene Query** to visualize gene expression on UMAP and compare cell_type/condition-level patterns.  
-            3. Use **Disease–subtype compare** to compare subtype proportions and Ro/e enrichment across conditions.
+            2. Use **Gene Query** to visualize gene expression on UMAP and compare cell_type/condition-level patterns (enter a human gene symbol in the sidebar).  
+            3. Use **Disease–subtype compare** to compare subtype proportions and Ro/e enrichment across conditions.  
+            4. Use **Data** to browse data source and disease/control composition tables.  
+            5. Use **About** to view project context, data integration notes, and contact details.
             """
         )
     elif module == "Metadata Explore":
@@ -817,7 +842,7 @@ def main() -> None:
                     "Please ensure obs includes both 'cell_type' and 'condition'."
                 )
         else:
-            st.info("Select a gene in the sidebar to display expression on UMAP.")
+            st.info("Please enter a gene (human gene symbol) in the sidebar.")
 
     elif module == "Disease–subtype compare":
         st.subheader("Disease–subtype compare")
@@ -905,7 +930,6 @@ def main() -> None:
                     table_df,
                     use_container_width=True,
                 )
-            st.caption(f"Source file: `{DEFAULT_DATA_SOURCES_PATH}`")
 
     elif module == "About":
         st.subheader("About")
