@@ -18,7 +18,10 @@ from core import (
     validate_core_metadata,
 )
 
-DEFAULT_H5AD_PATH = "./data/FBs_adata.h5ad"
+DEFAULT_H5AD_CANDIDATES = [
+    "./data/FBs_adata_slim.h5ad",
+    "./data/FBs_adata.h5ad",
+]
 DEFAULT_DATA_SOURCES_PATH = os.getenv("DATA_SOURCES_PATH", "./assets/data_sources.csv")
 DEFAULT_MAX_POINTS = int(os.getenv("UMAP_MAX_POINTS", "200000"))
 STRICT_DATA_MODE = os.getenv("STRICT_DATA", "false").strip().lower() in {"1", "true", "yes", "on"}
@@ -83,10 +86,21 @@ if not logger.handlers:
     )
 
 
+def resolve_default_h5ad_path() -> str:
+    configured = os.getenv("H5AD_PATH", "").strip()
+    if configured:
+        return configured
+    for path in DEFAULT_H5AD_CANDIDATES:
+        if os.path.exists(path):
+            return path
+    return DEFAULT_H5AD_CANDIDATES[0]
+
+
 def resolve_home_image_path() -> Optional[str]:
     configured = os.getenv("HOME_IMAGE_PATH", "").strip()
     candidates = [
         configured,
+        "./plot/home_page.png",
         "./assets/home_overview.png",
         "/data/chenji/fibroblast-atlas-browser-new/plot/home_page.jpg",
     ]
@@ -542,7 +556,7 @@ def main() -> None:
     apply_global_styles()
     st.title("Cross-disease Human Heart Fibroblast Atlas")
 
-    default_path = os.getenv("H5AD_PATH", DEFAULT_H5AD_PATH)
+    default_path = resolve_default_h5ad_path()
     adata, is_demo, status_msg = load_adata(default_path)
     if STRICT_DATA_MODE and is_demo:
         st.error(
@@ -700,7 +714,7 @@ def main() -> None:
         else:
             st.caption(
                 "Tip: set `HOME_IMAGE_PATH` or place an image at "
-                "`./assets/home_overview.png` "
+                "`./plot/home_page.png` or `./assets/home_overview.png` "
                 "(also supports `/data/chenji/fibroblast-atlas-browser-new/plot/home_page.jpg`)."
             )
         st.subheader("How to use this portal")
