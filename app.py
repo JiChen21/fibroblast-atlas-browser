@@ -921,7 +921,6 @@ def main() -> None:
                     table_df,
                     use_container_width=True,
                 )
-            st.caption(f"Source file: `{DEFAULT_DATA_SOURCES_PATH}`")
 
     elif module == "About":
         st.subheader("About")
