@@ -740,7 +740,7 @@ def main() -> None:
             2. Use **Gene Query** to visualize gene expression on UMAP and compare cell_type/condition-level patterns (enter a human gene symbol in the sidebar).  
             3. Use **Disease–subtype compare** to compare subtype proportions and Ro/e enrichment across conditions.  
             4. Use **Data** to browse data source and disease/control composition tables.  
-            5. Use **About** to view project context, data integration notes, and contact details.
+            5. Use **About** to view citation information and contact details.
             """
         )
     elif module == "Metadata Explore":
