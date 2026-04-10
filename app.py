@@ -707,8 +707,10 @@ def main() -> None:
         st.markdown(
             """
             1. Use **Metadata Explore** to inspect UMAP distributions and subset cells with sidebar filters.  
-            2. Use **Gene Query** to visualize gene expression on UMAP and compare cell_type/condition-level patterns.  
-            3. Use **Disease–subtype compare** to compare subtype proportions and Ro/e enrichment across conditions.
+            2. Use **Gene Query** to visualize gene expression on UMAP and compare cell_type/condition-level patterns (enter a human gene symbol in the sidebar).  
+            3. Use **Disease–subtype compare** to compare subtype proportions and Ro/e enrichment across conditions.  
+            4. Use **Data** to browse data source and disease/control composition tables.  
+            5. Use **About** to view project context, data integration notes, and contact details.
             """
         )
     elif module == "Metadata Explore":
@@ -817,7 +819,7 @@ def main() -> None:
                     "Please ensure obs includes both 'cell_type' and 'condition'."
                 )
         else:
-            st.info("Select a gene in the sidebar to display expression on UMAP.")
+            st.info("Please enter a gene (human gene symbol) in the sidebar.")
 
     elif module == "Disease–subtype compare":
         st.subheader("Disease–subtype compare")
