@@ -591,6 +591,7 @@ def main() -> None:
         ["Atlas Overview", "Metadata Explore", "Gene Query", "Disease–subtype compare", "Data", "About"],
         horizontal=True,
         label_visibility="collapsed",
+        key="nav_module",
     )
 
     color_by = "cell_type" if "cell_type" in color_candidates else color_candidates[0]
@@ -609,6 +610,7 @@ def main() -> None:
                 "Metadata color selector",
                 options=color_candidates,
                 index=color_candidates.index(color_by) if color_by in color_candidates else 0,
+                key="sidebar_color_by",
             )
 
             st.subheader("Filters")
@@ -616,7 +618,7 @@ def main() -> None:
             if module == "Disease–subtype compare":
                 # Condition selection is managed by the dedicated selector below.
                 filter_columns_for_module = [c for c in filter_columns_for_module if c != "condition"]
-            if st.button("Reset filters", use_container_width=True):
+            if st.button("Reset filters", use_container_width=True, key=f"reset_filters_{module}"):
                 for col in filter_columns_for_module:
                     st.session_state[f"filter_{col}"] = []
 
@@ -628,7 +630,12 @@ def main() -> None:
                 selected_filters[col] = st.multiselect(col, options=options, key=key)
 
             st.subheader("Visualization performance")
-            view_mode = st.radio("UMAP view mode", ["Auto", "Downsampled", "Full"], index=0)
+            view_mode = st.radio(
+                "UMAP view mode",
+                ["Auto", "Downsampled", "Full"],
+                index=0,
+                key=f"umap_view_mode_{module}",
+            )
             max_points = int(
                 st.number_input(
                     "Display point cap",
@@ -637,6 +644,7 @@ def main() -> None:
                     value=min(DEFAULT_MAX_POINTS, max(10000, adata.n_obs)),
                     step=10000,
                     help="Used in Auto/Downsampled mode to keep plotting responsive.",
+                    key=f"display_point_cap_{module}",
                 )
             )
 
@@ -648,6 +656,7 @@ def main() -> None:
                     value="",
                     placeholder="e.g., COL1A1",
                     help="Gene names are resolved directly from adata.var_names.",
+                    key="gene_query_input",
                 ).strip()
 
             if module == "Disease–subtype compare":
