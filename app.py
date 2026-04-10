@@ -493,6 +493,13 @@ def apply_global_styles() -> None:
         [data-testid="stSidebar"] {
             background-color: #ffffff !important;
         }
+        /* Hide Streamlit top-right app chrome menu/toolbar in published UI */
+        [data-testid="stToolbar"],
+        [data-testid="stDecoration"],
+        #MainMenu {
+            display: none !important;
+            visibility: hidden !important;
+        }
         .stApp,
         .stApp p,
         .stApp li,
